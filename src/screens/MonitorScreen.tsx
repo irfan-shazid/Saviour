@@ -20,7 +20,7 @@ import { buildEmergencyMessage, sendEmergencySMS } from '../services/sms';
 import { genId, loadContacts, loadIncidents, upsertIncident } from '../storage';
 import type { Incident, IncidentSource, SmsOutcome } from '../types';
 import { EmergencyOverlay } from '../components/EmergencyOverlay';
-import { Banner, Button, Card } from '../components/ui';
+import { Banner, Button, Card, MountFade } from '../components/ui';
 import { relativeTime } from '../utils/format';
 import { colors, radius, spacing, type } from '../theme';
 
@@ -39,6 +39,8 @@ export function MonitorScreen() {
   const [lastIncident, setLastIncident] = useState<Incident | null>(null);
 
   const pulse = useRef(new Animated.Value(0)).current;
+  const pulse2 = useRef(new Animated.Value(0)).current;
+  const breathe = useRef(new Animated.Value(0)).current;
 
   const refresh = useCallback(async () => {
     const [contacts, incidents, perm] = await Promise.all([
@@ -73,24 +75,43 @@ export function MonitorScreen() {
     return () => sub.remove();
   }, []);
 
-  // Beacon pulse animation while monitoring.
+  // Beacon animation while monitoring: two radar rings pulsing out of phase,
+  // plus a slow "breathing" scale on the core so an idle screen still feels live.
   useEffect(() => {
     if (!monitoring) {
-      pulse.stopAnimation();
-      pulse.setValue(0);
+      [pulse, pulse2, breathe].forEach((v) => {
+        v.stopAnimation();
+        v.setValue(0);
+      });
       return;
     }
-    const loop = Animated.loop(
-      Animated.timing(pulse, {
-        toValue: 1,
-        duration: 2000,
-        easing: Easing.out(Easing.ease),
-        useNativeDriver: true,
-      })
+    const ring = (v: Animated.Value) =>
+      Animated.loop(
+        Animated.timing(v, {
+          toValue: 1,
+          duration: 2400,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        })
+      );
+    const ringA = ring(pulse);
+    const ringB = ring(pulse2);
+    const breath = Animated.loop(
+      Animated.sequence([
+        Animated.timing(breathe, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(breathe, { toValue: 0, duration: 1500, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ])
     );
-    loop.start();
-    return () => loop.stop();
-  }, [monitoring, pulse]);
+    ringA.start();
+    breath.start();
+    const t = setTimeout(() => ringB.start(), 1200);
+    return () => {
+      clearTimeout(t);
+      ringA.stop();
+      ringB.stop();
+      breath.stop();
+    };
+  }, [monitoring, pulse, pulse2, breathe]);
 
   const openIncident = useCallback(
     async (source: IncidentSource, magnitude?: number) => {
@@ -193,28 +214,45 @@ export function MonitorScreen() {
   const firstName = settings.name.trim().split(' ')[0];
   const notReady = ready.contacts === 0 || !ready.hasName;
 
-  const ringScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.8] });
-  const ringOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] });
+  const ringScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.9] });
+  const ringOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.45, 0] });
+  const ring2Scale = pulse2.interpolate({ inputRange: [0, 1], outputRange: [1, 1.9] });
+  const ring2Opacity = pulse2.interpolate({ inputRange: [0, 1], outputRange: [0.45, 0] });
+  const coreScale = breathe.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] });
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.hello}>Hi{firstName ? ` ${firstName}` : ''} 👋</Text>
+      <MountFade delay={0}>
+        <Text style={styles.hello}>Hi{firstName ? ` ${firstName}` : ''} 👋</Text>
+      </MountFade>
 
+      <MountFade delay={60}>
       <Card elevated style={{ alignItems: 'center', paddingVertical: spacing(4) }}>
         <View style={styles.beaconBox}>
           {monitoring && (
-            <Animated.View
-              style={[
-                styles.beaconPulse,
-                { borderColor: colors.safe, opacity: ringOpacity, transform: [{ scale: ringScale }] },
-              ]}
-            />
+            <>
+              <Animated.View
+                style={[
+                  styles.beaconPulse,
+                  { borderColor: colors.safe, opacity: ringOpacity, transform: [{ scale: ringScale }] },
+                ]}
+              />
+              <Animated.View
+                style={[
+                  styles.beaconPulse,
+                  { borderColor: colors.safe, opacity: ring2Opacity, transform: [{ scale: ring2Scale }] },
+                ]}
+              />
+            </>
           )}
           <View style={[styles.beacon, { borderColor: monitoring ? colors.safe : colors.border }]}>
-            <View
+            <Animated.View
               style={[
                 styles.beaconDot,
-                { backgroundColor: monitoring ? colors.safe : colors.textFaint },
+                {
+                  backgroundColor: monitoring ? colors.safe : colors.textFaint,
+                  transform: [{ scale: monitoring ? coreScale : 1 }],
+                },
               ]}
             />
           </View>
@@ -239,6 +277,7 @@ export function MonitorScreen() {
           />
         </View>
       </Card>
+      </MountFade>
 
       {monitoring && backgrounded && (
         <Banner
@@ -260,15 +299,18 @@ export function MonitorScreen() {
         />
       )}
 
-      <Button
-        title="Send SOS now"
-        icon="🆘"
-        variant="danger"
-        onPress={confirmSos}
-        loading={busy}
-        style={{ marginTop: spacing(2) }}
-      />
+      <MountFade delay={120}>
+        <Button
+          title="Send SOS now"
+          icon="🆘"
+          variant="danger"
+          onPress={confirmSos}
+          loading={busy}
+          style={{ marginTop: spacing(2) }}
+        />
+      </MountFade>
 
+      <MountFade delay={180}>
       <Card style={{ marginTop: spacing(2) }}>
         <Text style={styles.cardTitle}>Readiness</Text>
         <CheckRow ok={ready.hasName} label="Your name is set" hint="Shown in the alert text" />
@@ -292,17 +334,21 @@ export function MonitorScreen() {
           }
         />
       </Card>
+      </MountFade>
 
       {lastIncident && (
-        <Card style={{ marginTop: spacing(2) }}>
-          <Text style={styles.cardTitle}>Last incident</Text>
-          <Text style={styles.lastLine}>
-            {lastIncident.source === 'MANUAL_SOS' ? 'Manual SOS' : 'Fall detected'} ·{' '}
-            {lastIncident.status} · {relativeTime(lastIncident.detectedAt)}
-          </Text>
-        </Card>
+        <MountFade delay={220}>
+          <Card style={{ marginTop: spacing(2) }}>
+            <Text style={styles.cardTitle}>Last incident</Text>
+            <Text style={styles.lastLine}>
+              {lastIncident.source === 'MANUAL_SOS' ? 'Manual SOS' : 'Fall detected'} ·{' '}
+              {lastIncident.status} · {relativeTime(lastIncident.detectedAt)}
+            </Text>
+          </Card>
+        </MountFade>
       )}
 
+      <MountFade delay={260}>
       <Card style={{ marginTop: spacing(2) }}>
         <Text style={styles.cardTitle}>How it works</Text>
         <Text style={styles.infoLine}>1. Turn on monitoring and keep Saviour open.</Text>
@@ -323,6 +369,7 @@ export function MonitorScreen() {
         style={{ marginTop: spacing(2) }}
       />
       <Text style={styles.testHint}>Previews the countdown. Nothing is sent.</Text>
+      </MountFade>
 
       {active && (
         <EmergencyOverlay

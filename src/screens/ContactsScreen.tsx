@@ -2,7 +2,18 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, FlatList, Linking, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { genId, loadContacts, saveContactOrder, saveContacts } from '../storage';
 import type { EmergencyContact } from '../types';
-import { Avatar, Badge, Button, Card, EmptyState, Field, IconButton, ScreenHeader } from '../components/ui';
+import {
+  Avatar,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  IconButton,
+  MountFade,
+  ScreenHeader,
+  smoothLayout,
+} from '../components/ui';
 import { initials, looksLikePhone, normalisePhone, telUri } from '../utils/format';
 import { colors, spacing, type } from '../theme';
 
@@ -30,12 +41,14 @@ export function ContactsScreen() {
   }, [load]);
 
   const resetForm = () => {
+    smoothLayout();
     setDraft(EMPTY);
     setEditingId(null);
     setErrors({});
   };
 
   const startEdit = (c: EmergencyContact) => {
+    smoothLayout();
     setEditingId(c.id);
     setDraft({ name: c.name, phone: c.phone, relationship: c.relationship ?? '' });
     setErrors({});
@@ -66,6 +79,7 @@ export function ContactsScreen() {
         next = [...contacts, { id: genId(), priority: contacts.length + 1, ...clean }];
       }
       await saveContacts(next);
+      smoothLayout();
       setContacts(next);
       resetForm();
     } catch (e) {
@@ -80,6 +94,7 @@ export function ContactsScreen() {
     if (target < 0 || target >= contacts.length) return;
     const next = [...contacts];
     [next[index], next[target]] = [next[target], next[index]];
+    smoothLayout(200);
     setContacts(next.map((c, i) => ({ ...c, priority: i + 1 }))); // optimistic
     await saveContactOrder(next); // persist + renumber on disk
   };
@@ -92,7 +107,9 @@ export function ContactsScreen() {
         style: 'destructive',
         onPress: async () => {
           const next = contacts.filter((x) => x.id !== c.id);
-          setContacts(await saveContactOrder(next));
+          const saved = await saveContactOrder(next);
+          smoothLayout();
+          setContacts(saved);
           if (editingId === c.id) resetForm();
         },
       },
@@ -171,6 +188,7 @@ export function ContactsScreen() {
         ) : null
       }
       renderItem={({ item, index }) => (
+        <MountFade delay={Math.min(index, 6) * 45}>
         <Card style={styles.row} padded={false}>
           <View style={styles.rowMain}>
             <Avatar initials={initials(item.name)} color={index === 0 ? colors.safe : colors.primary} />
@@ -208,6 +226,7 @@ export function ContactsScreen() {
             />
           </View>
         </Card>
+        </MountFade>
       )}
     />
   );

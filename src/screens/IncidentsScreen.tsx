@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, Linking, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { clearIncidents, loadIncidents } from '../storage';
 import type { Incident, IncidentStatus, SmsOutcome } from '../types';
-import { Badge, Button, Card, EmptyState, ScreenHeader } from '../components/ui';
+import { Badge, Button, Card, EmptyState, MountFade, ScreenHeader, smoothLayout } from '../components/ui';
 import { fullTime, mapsUrl, relativeTime } from '../utils/format';
 import { colors, radius, spacing, type } from '../theme';
 
@@ -55,6 +55,7 @@ export function IncidentsScreen() {
         style: 'destructive',
         onPress: async () => {
           await clearIncidents();
+          smoothLayout();
           setIncidents([]);
         },
       },
@@ -100,9 +101,10 @@ export function IncidentsScreen() {
           <EmptyState icon="🛟" title="No incidents recorded" subtitle="Stay safe out there." />
         ) : null
       }
-      renderItem={({ item }) => {
+      renderItem={({ item, index }) => {
         const hasCoords = item.latitude != null && item.longitude != null;
         return (
+          <MountFade delay={Math.min(index, 8) * 40}>
           <Card style={{ marginBottom: spacing(1.5) }}>
             <View style={styles.rowTop}>
               <Badge text={item.status} color={STATUS_COLOR[item.status]} />
@@ -129,6 +131,7 @@ export function IncidentsScreen() {
               </Text>
             ) : null}
           </Card>
+          </MountFade>
         );
       }}
     />

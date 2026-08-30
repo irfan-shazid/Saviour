@@ -1,8 +1,10 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   AccessibilityRole,
   ActivityIndicator,
   Animated,
+  Easing,
+  LayoutAnimation,
   Pressable,
   StyleProp,
   StyleSheet,
@@ -15,6 +17,67 @@ import {
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { colors, radius, shadow, spacing, type } from '../theme';
+
+/* ------------------------------------------------------------------ *
+ * smoothLayout — one call before a setState that changes layout
+ * (list add/remove/reorder, a form expanding) so the change eases
+ * into place instead of snapping. Cheaper and lighter than pulling in
+ * Reanimated for what is mostly height/position tweening.
+ * ------------------------------------------------------------------ */
+export function smoothLayout(duration = 240) {
+  LayoutAnimation.configureNext({
+    duration,
+    create: { type: 'easeInEaseOut', property: 'opacity' },
+    update: { type: 'spring', springDamping: 0.8 },
+    delete: { type: 'easeInEaseOut', property: 'opacity' },
+  });
+}
+
+/* ------------------------------------------------------------------ *
+ * MountFade — fades + lifts its children in on first render. Used to
+ * stagger a screen's cards so content arrives instead of blinking on.
+ * Native-driven, so it stays at 60fps even during nav transitions.
+ * ------------------------------------------------------------------ */
+export function MountFade({
+  children,
+  delay = 0,
+  offset = 10,
+  style,
+}: {
+  children: React.ReactNode;
+  delay?: number;
+  offset?: number;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const t = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const anim = Animated.timing(t, {
+      toValue: 1,
+      duration: 340,
+      delay,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    });
+    anim.start();
+    return () => anim.stop();
+  }, [t, delay]);
+
+  return (
+    <Animated.View
+      style={[
+        {
+          opacity: t,
+          transform: [
+            { translateY: t.interpolate({ inputRange: [0, 1], outputRange: [offset, 0] }) },
+          ],
+        },
+        style,
+      ]}
+    >
+      {children}
+    </Animated.View>
+  );
+}
 
 /* ------------------------------------------------------------------ *
  * AnimatedPressable — subtle press-in scale + optional haptic tick.

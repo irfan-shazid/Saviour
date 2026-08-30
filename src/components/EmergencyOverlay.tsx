@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Linking, Modal, Platform, StyleSheet, Text, Vibration, View } from 'react-native';
+import { Animated, Linking, Modal, Platform, StyleSheet, Text, Vibration, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import type { Incident, SmsOutcome } from '../types';
 import { colors, radius, spacing, type } from '../theme';
-import { Button } from './ui';
+import { Button, smoothLayout } from './ui';
 import { CountdownRing } from './CountdownRing';
 
 type Phase = 'countdown' | 'waiting' | 'escalating' | 'result' | 'safe' | 'error';
@@ -76,10 +76,27 @@ export function EmergencyOverlay({
   test?: boolean;
 }) {
   const [remaining, setRemaining] = useState(incident.countdownSeconds);
-  const [phase, setPhase] = useState<Phase>('countdown');
+  const [phase, setPhaseRaw] = useState<Phase>('countdown');
   const [outcome, setOutcome] = useState<SmsOutcome>('sent');
   const [error, setError] = useState<string | null>(null);
   const escalatedRef = useRef(false);
+
+  // Ease the sheet's height/content whenever the phase (and so its body) changes.
+  const setPhase = useCallback((p: Phase) => {
+    smoothLayout(220);
+    setPhaseRaw(p);
+  }, []);
+
+  // Spring the sheet up on mount instead of a bare fade.
+  const enter = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.spring(enter, {
+      toValue: 1,
+      speed: 12,
+      bounciness: 7,
+      useNativeDriver: true,
+    }).start();
+  }, [enter]);
 
   const stopAlarm = useCallback(() => Vibration.cancel(), []);
 
@@ -150,7 +167,18 @@ export function EmergencyOverlay({
   return (
     <Modal visible animationType="fade" transparent statusBarTranslucent onRequestClose={() => {}}>
       <View style={styles.backdrop}>
-        <View style={styles.sheet}>
+        <Animated.View
+          style={[
+            styles.sheet,
+            {
+              opacity: enter,
+              transform: [
+                { scale: enter.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }) },
+                { translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [22, 0] }) },
+              ],
+            },
+          ]}
+        >
           {(phase === 'countdown' || phase === 'waiting') && (
             <>
               {test && <Text style={styles.testTag}>TEST — no alerts will be sent</Text>}
@@ -228,7 +256,7 @@ export function EmergencyOverlay({
               </View>
             </>
           )}
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
