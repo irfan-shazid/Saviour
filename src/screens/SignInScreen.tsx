@@ -4,9 +4,20 @@ import { AppBackground } from '../components/AppBackground';
 import { Banner, Button, Field, GlassView, smoothLayout } from '../components/ui';
 import { useTheme, useThemedStyles, type ThemeState } from '../context/ThemeContext';
 import { authClient, authConfigured, authErrorMessage } from '../services/auth';
+import { reconcileAfterSignIn } from '../services/sync';
 import { spacing } from '../theme';
 
 type Mode = 'signIn' | 'signUp';
+
+/** Better Auth's code for "this address hasn't been confirmed yet". */
+const UNVERIFIED_CODES = ['EMAIL_NOT_VERIFIED', 'EMAIL_VERIFICATION_REQUIRED'];
+
+function isUnverified(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { code?: string; status?: number; message?: string };
+  if (e.code && UNVERIFIED_CODES.includes(e.code)) return true;
+  return e.status === 403 && /verif/i.test(e.message ?? '');
+}
 
 /**
  * Optional account screen. Saviour works entirely on-device, so this never
@@ -21,13 +32,32 @@ export function SignInScreen({ onDone }: { onDone: () => void }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState<null | 'email' | 'google'>(null);
+  const [busy, setBusy] = useState<null | 'email' | 'google' | 'resend'>(null);
   const [error, setError] = useState<string | null>(null);
+  /** Set once a verification link has been mailed, so the UI can say so. */
+  const [awaitingVerification, setAwaitingVerification] = useState(false);
 
   const swap = () => {
     smoothLayout();
     setMode((m) => (m === 'signIn' ? 'signUp' : 'signIn'));
     setError(null);
+    setAwaitingVerification(false);
+  };
+
+  const resendVerification = async () => {
+    setBusy('resend');
+    setError(null);
+    try {
+      await authClient.sendVerificationEmail({
+        email: email.trim(),
+        callbackURL: 'saviour://',
+      });
+      setAwaitingVerification(true);
+    } catch (e) {
+      setError(authErrorMessage(e, 'Could not send the verification email.'));
+    } finally {
+      setBusy(null);
+    }
   };
 
   const submitEmail = async () => {
@@ -42,17 +72,34 @@ export function SignInScreen({ onDone }: { onDone: () => void }) {
     setBusy('email');
     setError(null);
     try {
-      const res =
-        mode === 'signUp'
-          ? await authClient.signUp.email({
-              email: email.trim(),
-              password,
-              name: name.trim() || email.trim().split('@')[0],
-            })
-          : await authClient.signIn.email({ email: email.trim(), password });
+      if (mode === 'signUp') {
+        const res = await authClient.signUp.email({
+          email: email.trim(),
+          password,
+          name: name.trim() || email.trim().split('@')[0],
+          callbackURL: 'saviour://',
+        });
+        if (res.error) {
+          setError(authErrorMessage(res.error, 'Could not create your account.'));
+        } else {
+          // Verification is required, so there is no session yet — the user
+          // has to tap the link in their inbox first.
+          smoothLayout();
+          setAwaitingVerification(true);
+        }
+        return;
+      }
 
-      if (res.error) setError(authErrorMessage(res.error, 'Could not sign you in.'));
-      else onDone();
+      const res = await authClient.signIn.email({ email: email.trim(), password });
+      if (!res.error) {
+        await reconcileAfterSignIn();
+        onDone();
+      } else if (isUnverified(res.error)) {
+        smoothLayout();
+        setAwaitingVerification(true);
+      } else {
+        setError(authErrorMessage(res.error, 'Could not sign you in.'));
+      }
     } catch (e) {
       setError(authErrorMessage(e, 'Could not reach the server. Check your connection.'));
     } finally {
@@ -65,8 +112,12 @@ export function SignInScreen({ onDone }: { onDone: () => void }) {
     setError(null);
     try {
       const res = await authClient.signIn.social({ provider: 'google', callbackURL: 'saviour://' });
-      if (res.error) setError(authErrorMessage(res.error, 'Google sign-in failed.'));
-      else onDone();
+      if (res.error) {
+        setError(authErrorMessage(res.error, 'Google sign-in failed.'));
+      } else {
+        await reconcileAfterSignIn();
+        onDone();
+      }
     } catch (e) {
       setError(authErrorMessage(e, 'Google sign-in failed.'));
     } finally {
@@ -98,6 +149,39 @@ export function SignInScreen({ onDone }: { onDone: () => void }) {
                   title="No account server configured"
                   message="Set EXPO_PUBLIC_AUTH_URL in .env to enable sign-in. Saviour works fully without it."
                 />
+              ) : awaitingVerification ? (
+                <>
+                  <Text style={styles.verifyIcon}>📬</Text>
+                  <Text style={styles.panelTitle}>Check your inbox</Text>
+                  <Text style={styles.verifyBody}>
+                    We sent a verification link to{' '}
+                    <Text style={styles.verifyEmail}>{email.trim()}</Text>. Tap it to confirm your
+                    address — that also signs you in, so there’s no code to type.
+                  </Text>
+                  {error && (
+                    <View style={{ marginBottom: spacing(2) }}>
+                      <Banner tone="danger" title="Couldn’t send" message={error} />
+                    </View>
+                  )}
+                  <Button
+                    title="Resend the link"
+                    variant="subtle"
+                    onPress={resendVerification}
+                    loading={busy === 'resend'}
+                    disabled={busy !== null}
+                  />
+                  <Text
+                    style={styles.swap}
+                    onPress={() => {
+                      smoothLayout();
+                      setAwaitingVerification(false);
+                      setMode('signIn');
+                      setError(null);
+                    }}
+                  >
+                    Back to sign in
+                  </Text>
+                </>
               ) : (
                 <>
                   <Text style={styles.panelTitle}>
@@ -211,6 +295,14 @@ const makeStyles = ({ colors, type }: ThemeState) =>
     panel: { alignSelf: 'stretch' },
     panelInner: { padding: spacing(2.5) },
     panelTitle: { ...type.h2, marginBottom: spacing(2) },
+    verifyIcon: { fontSize: 40, marginBottom: spacing(1) },
+    verifyBody: {
+      color: colors.textMuted,
+      fontSize: 14,
+      lineHeight: 21,
+      marginBottom: spacing(2.5),
+    },
+    verifyEmail: { color: colors.text, fontWeight: '700' },
     dividerRow: {
       flexDirection: 'row',
       alignItems: 'center',

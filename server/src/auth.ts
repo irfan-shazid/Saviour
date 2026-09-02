@@ -1,26 +1,10 @@
-import 'dotenv/config';
-import Database from 'better-sqlite3';
 import { betterAuth } from 'better-auth';
 import { expo } from '@better-auth/expo';
+import { pool } from './db.js';
+import { env, googleEnabled } from './env.js';
+import { sendPasswordResetEmail, sendVerificationEmail } from './email.js';
 
-const {
-  BETTER_AUTH_SECRET,
-  BETTER_AUTH_URL = 'http://localhost:8787',
-  DATABASE_PATH = './saviour-auth.db',
-  GOOGLE_CLIENT_ID,
-  GOOGLE_CLIENT_SECRET,
-  APP_SCHEME = 'saviour',
-} = process.env;
-
-if (!BETTER_AUTH_SECRET) {
-  throw new Error(
-    'BETTER_AUTH_SECRET is required. Copy server/.env.example to server/.env and set one ' +
-      '(`openssl rand -base64 32`).'
-  );
-}
-
-const googleConfigured = Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
-if (!googleConfigured) {
+if (!googleEnabled) {
   console.warn(
     '[auth] GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not set — Google sign-in is disabled. ' +
       'Email and password still work.'
@@ -28,38 +12,62 @@ if (!googleConfigured) {
 }
 
 /**
- * Kept separate from the `auth` instance because `getMigrations()` (run at
- * server boot) takes the options object, not the built instance.
+ * Kept separate from the built instance because `getMigrations()` takes the
+ * options object, not the instance.
+ *
+ * Verification is **link-based**: Better Auth mails a URL, the user taps it,
+ * and the address is confirmed. There is deliberately no `emailOTP` plugin —
+ * no codes to type in anywhere.
  */
 export const authOptions = {
   appName: 'Saviour',
-  database: new Database(DATABASE_PATH),
-  baseURL: BETTER_AUTH_URL,
-  secret: BETTER_AUTH_SECRET,
+  database: pool,
+  baseURL: env.BETTER_AUTH_URL,
+  secret: env.BETTER_AUTH_SECRET,
 
   emailAndPassword: {
     enabled: true,
-    // No verification email anywhere in this config: sign-up creates the
-    // account and signs the user straight in. Better Auth only sends a
-    // verification mail when `emailVerification.sendVerificationEmail` is
-    // provided, and it deliberately is not.
-    requireEmailVerification: false,
-    autoSignIn: true,
     minPasswordLength: 8,
+    /** Sign-in is refused until the address is confirmed. */
+    requireEmailVerification: true,
+    /** Nothing to auto-sign-in to yet — the user must verify first. */
+    autoSignIn: false,
+    sendResetPassword: async ({ user, url }) => {
+      await sendPasswordResetEmail(user.email, url);
+    },
   },
 
-  socialProviders: googleConfigured
+  emailVerification: {
+    /** The mail goes out as part of sign-up, unprompted. */
+    sendOnSignUp: true,
+    /** Tapping the link also signs them in, so there's no second step. */
+    autoSignInAfterVerification: true,
+    expiresIn: 60 * 60, // one hour
+    sendVerificationEmail: async ({ user, url }) => {
+      await sendVerificationEmail(user.email, url, user.name);
+    },
+  },
+
+  socialProviders: googleEnabled
     ? {
         google: {
-          clientId: GOOGLE_CLIENT_ID!,
-          clientSecret: GOOGLE_CLIENT_SECRET!,
+          clientId: env.GOOGLE_CLIENT_ID,
+          clientSecret: env.GOOGLE_CLIENT_SECRET,
         },
       }
     : {},
 
-  // The app opens OAuth in a browser and is handed back through its custom
-  // scheme; Expo Go instead uses an exp:// URL, so both are trusted.
-  trustedOrigins: [`${APP_SCHEME}://`, 'exp://', 'exp://*'],
+  // Google already proves the address, so those accounts skip verification.
+  account: {
+    accountLinking: {
+      enabled: true,
+      trustedProviders: ['google'],
+    },
+  },
+
+  // OAuth and verification links come back into the app through its custom
+  // scheme; Expo Go instead serves everything under exp://.
+  trustedOrigins: [`${env.APP_SCHEME}://`, 'exp://', 'exp://*'],
 
   plugins: [expo()],
 } satisfies Parameters<typeof betterAuth>[0];

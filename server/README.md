@@ -1,16 +1,28 @@
-# Saviour auth server
+# Saviour server
 
-A [Better Auth](https://better-auth.com) server providing Google and
-email/password sign-in for the Saviour app. SQLite for storage, Express for
-transport. Tables are created automatically on first boot.
+Auth and data backend for the Saviour app.
 
-**No verification emails.** Sign-up creates the account and signs the user in
-immediately. Better Auth only sends a verification mail when
-`emailVerification.sendVerificationEmail` is configured, and it deliberately
-isn't — see [`src/auth.ts`](src/auth.ts).
+- **[Better Auth](https://better-auth.com)** — Google sign-in and email/password
+- **[Neon](https://neon.tech)** Postgres — auth tables *and* app data (contacts, incidents, settings)
+- **Link-based email verification** — no OTP codes anywhere
+- Express transport, self-migrating on boot
 
-Accounts are optional in the app. Saviour's fall detection, SOS and contacts
-are entirely on-device, so the app runs fine with no server at all.
+Accounts are optional in the app. Saviour's fall detection, SOS and contacts are
+on-device, so it runs fine with no server at all.
+
+## Email verification
+
+Sign-up mails a **link**. Tapping it confirms the address and signs the user in
+(`autoSignInAfterVerification`), so there is no code to type. There is
+deliberately no `emailOTP` plugin.
+
+Sign-in is refused until the address is verified. Google accounts skip
+verification entirely — Google has already proven the address.
+
+**This means SMTP is required for email/password sign-up.** Without it the
+verification link cannot be delivered and nobody can finish signing up. With
+SMTP unset the link is printed to the server console instead, which is enough
+for local development.
 
 ## Setup
 
@@ -20,65 +32,73 @@ npm install
 cp .env.example .env
 ```
 
-Then edit `.env`:
+Fill in `.env` — every variable is documented in
+[`.env.example`](.env.example). The two that are genuinely required:
 
-| Variable | What it's for |
+| Variable | Where it comes from |
 | --- | --- |
-| `BETTER_AUTH_SECRET` | Session signing key. Generate with `openssl rand -base64 32`. **Required.** |
-| `BETTER_AUTH_URL` | Public URL the server is reachable at. For a phone on your Wi-Fi this must be your machine's **LAN IP**, not `localhost`. |
-| `PORT` | Defaults to `8787`. |
-| `DATABASE_PATH` | SQLite file. Defaults to `./saviour-auth.db`. |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Optional. Leave blank for email/password only. |
+| `DATABASE_URL` | Neon console → your project → **Connection Details**. Use the **pooled** string (host contains `-pooler`), keep `?sslmode=require`. |
+| `BETTER_AUTH_SECRET` | `openssl rand -base64 32` |
 
-Run it:
+Then check everything at once:
+
+```bash
+npm run verify
+```
+
+That connects to Neon, runs all migrations, lists the tables it created, and
+tells you which optional features are configured. Run it before anything else.
+
+Then:
 
 ```bash
 npm run dev     # watch mode
 npm start       # once
 ```
 
-You should see:
+## Tables
 
-```
-[auth] migrated: 4 table(s) created, 0 altered
-[auth] listening on http://0.0.0.0:8787
-```
+Better Auth owns `user`, `session`, `account`, `verification`. Saviour adds:
 
-Check it: `curl http://localhost:8787/health`
+| Table | Holds |
+| --- | --- |
+| `app_settings` | One JSONB row per user |
+| `app_contact` | Emergency contacts, ordered by `priority` |
+| `app_incident` | Incident history as JSONB, newest first |
 
-## Point the app at it
+Every app row is `references "user"(id) on delete cascade`, and every query in
+[`src/routes/data.ts`](src/routes/data.ts) filters on the session's user id —
+no endpoint takes a user id from the request body.
 
-In the **project root** (not `server/`):
+## Sync model
 
-```bash
-cp .env.example .env
-```
+The **phone is the source of truth.** Saviour must work with no signal, which
+is exactly when someone is most likely to need it, so `/api/data/*` is a sync
+target rather than a live backend. The app reads locally, writes locally, and
+mirrors up in the background; a failed sync never blocks an alert.
 
-Set `EXPO_PUBLIC_AUTH_URL` to the same address as `BETTER_AUTH_URL`, then
-restart Metro with `npx expo start -c` — `EXPO_PUBLIC_*` values are inlined at
-bundle time, so a plain reload won't pick up a change.
-
-Leave it blank to disable the account screen entirely.
+On sign-in, a device with no contacts pulls the server's copy; a device that
+already has contacts pushes its own.
 
 ## Google sign-in
 
-1. Go to <https://console.cloud.google.com/apis/credentials>.
-2. **Create credentials → OAuth client ID → Web application.**
-3. Add an authorised redirect URI of exactly:
+1. <https://console.cloud.google.com/apis/credentials>
+2. **Create credentials → OAuth client ID → Web application**
+3. Authorised redirect URI, exactly:
    `<BETTER_AUTH_URL>/api/auth/callback/google`
-   e.g. `http://192.168.0.100:8787/api/auth/callback/google`
-4. Put the client ID and secret in `server/.env` and restart the server.
+4. Put the ID and secret in `.env`, restart.
 
-> **Expo Go caveat.** Google sign-in redirects back through the app's custom
-> `saviour://` scheme, which Expo Go does not own — it serves everything under
-> `exp://`. Expect Google sign-in to work in a **development build** but not
-> reliably in Expo Go. Email/password works in both, since it is a plain HTTP
-> request with no redirect.
+> **Expo Go caveat.** OAuth returns through the app's `saviour://` scheme, which
+> Expo Go does not own — it serves everything under `exp://`. Expect Google
+> sign-in to work in a **development build** but not reliably in Expo Go.
+> Email/password works in both, being a plain HTTP request.
 
 ## Deploying
 
-Nothing here is tied to localhost. Set the same environment variables on your
-host, point `BETTER_AUTH_URL` at the public HTTPS URL, add that URL's
+Nothing is tied to localhost. Set the same variables on your host, point
+`BETTER_AUTH_URL` at the public HTTPS URL, add that URL's
 `/api/auth/callback/google` to the Google credentials, and update
-`EXPO_PUBLIC_AUTH_URL` in the app. For anything beyond a handful of users,
-swap SQLite for Postgres — Better Auth takes any Kysely dialect.
+`EXPO_PUBLIC_AUTH_URL` in the app's `.env`.
+
+Neon is already managed Postgres, so it needs no change between development
+and production beyond using a separate branch or project.

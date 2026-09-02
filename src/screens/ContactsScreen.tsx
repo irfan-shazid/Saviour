@@ -15,6 +15,7 @@ import {
   ScreenHeader,
   smoothLayout,
 } from '../components/ui';
+import { syncUp } from '../services/sync';
 import { initials, looksLikePhone, normalisePhone, telUri } from '../utils/format';
 import { spacing } from '../theme';
 
@@ -83,6 +84,7 @@ export function ContactsScreen() {
         next = [...contacts, { id: genId(), priority: contacts.length + 1, ...clean }];
       }
       await saveContacts(next);
+      syncUp().catch(() => undefined); // mirror to the server when signed in
       smoothLayout();
       setContacts(next);
       resetForm();
@@ -101,6 +103,7 @@ export function ContactsScreen() {
     smoothLayout(200);
     setContacts(next.map((c, i) => ({ ...c, priority: i + 1 }))); // optimistic
     await saveContactOrder(next); // persist + renumber on disk
+    syncUp().catch(() => undefined);
   };
 
   const remove = (c: EmergencyContact) =>
@@ -112,6 +115,7 @@ export function ContactsScreen() {
         onPress: async () => {
           const next = contacts.filter((x) => x.id !== c.id);
           const saved = await saveContactOrder(next);
+          syncUp().catch(() => undefined);
           smoothLayout();
           setContacts(saved);
           if (editingId === c.id) resetForm();

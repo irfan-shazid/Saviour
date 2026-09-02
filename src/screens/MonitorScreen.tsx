@@ -23,6 +23,7 @@ import { genId, loadContacts, loadIncidents, upsertIncident } from '../storage';
 import type { Incident, IncidentSource, SmsOutcome } from '../types';
 import { EmergencyOverlay } from '../components/EmergencyOverlay';
 import { Banner, Button, Card, MountFade } from '../components/ui';
+import { syncIncident } from '../services/sync';
 import { hasDirectSmsPermission, isDirectSmsSupported } from '../../modules/direct-sms';
 import { relativeTime } from '../utils/format';
 import { radius, spacing } from '../theme';
@@ -198,7 +199,7 @@ export function MonitorScreen() {
         medicalNote: settings.medicalNote,
       })
     );
-    await upsertIncident({
+    const escalated: Incident = {
       ...active,
       status: 'EMERGENCY',
       latitude: loc.latitude ?? null,
@@ -208,13 +209,21 @@ export function MonitorScreen() {
       escalatedAt: new Date().toISOString(),
       contactsAlerted: contacts.map((c) => ({ name: c.name, phone: c.phone })),
       smsOutcome: outcome,
-    });
+    };
+    await upsertIncident(escalated);
+    syncIncident(escalated).catch(() => undefined); // mirror when signed in
     return outcome;
   }, [active, settings.name, settings.medicalNote]);
 
   const handleSafe = useCallback(async () => {
     if (!active) return;
-    await upsertIncident({ ...active, status: 'SAFE', respondedAt: new Date().toISOString() });
+    const safe: Incident = {
+      ...active,
+      status: 'SAFE',
+      respondedAt: new Date().toISOString(),
+    };
+    await upsertIncident(safe);
+    syncIncident(safe).catch(() => undefined);
   }, [active]);
 
   const closeActive = useCallback(() => {

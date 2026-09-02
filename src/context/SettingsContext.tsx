@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings } from '../storage';
+import { syncUp } from '../services/sync';
 import type { Settings } from '../types';
 
 interface SettingsState {
@@ -25,7 +26,11 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     async (patch: Partial<Settings>) => {
       setSettings((prev) => {
         const next = { ...prev, ...patch };
-        saveSettings(next).catch(() => undefined);
+        saveSettings(next)
+          // Mirror to the server when signed in. Fire-and-forget: settings are
+          // already safe on disk, and a failed sync must never surface here.
+          .then(() => syncUp())
+          .catch(() => undefined);
         return next;
       });
     },
