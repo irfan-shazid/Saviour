@@ -37,10 +37,20 @@ export type IncidentStatus = 'PENDING' | 'SAFE' | 'EMERGENCY' | 'CANCELLED';
 export type IncidentSource = 'FALL_DETECTION' | 'MANUAL_SOS';
 
 /**
- * Outcome of trying to open the SMS composer for the emergency alert.
- * Mirrors expo-sms results plus our own "unavailable"/"no-contacts" states.
+ * Outcome of trying to deliver the emergency alert.
+ *
+ * `auto-sent` means the text actually left the device with no user
+ * interaction. `sent`/`unknown`/`cancelled` come from the composer fallback,
+ * which is all iOS and Expo Go can do.
  */
-export type SmsOutcome = 'sent' | 'unknown' | 'cancelled' | 'unavailable' | 'no-contacts';
+export type SmsOutcome =
+  | 'auto-sent'
+  | 'auto-partial'
+  | 'sent'
+  | 'unknown'
+  | 'cancelled'
+  | 'unavailable'
+  | 'no-contacts';
 
 export interface Incident {
   id: string;

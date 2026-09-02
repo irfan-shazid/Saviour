@@ -8,6 +8,8 @@ import { fullTime, mapsUrl, relativeTime } from '../utils/format';
 import { radius, spacing } from '../theme';
 
 const OUTCOME_LABEL: Record<SmsOutcome, string> = {
+  'auto-sent': 'sent automatically',
+  'auto-partial': 'partly sent',
   sent: 'SMS sent',
   unknown: 'SMS composer opened',
   cancelled: 'SMS cancelled',

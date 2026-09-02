@@ -16,6 +16,18 @@ function outcomeCopy(
   c: Palette
 ): Record<SmsOutcome, { title: string; color: string; help: string; ok: boolean }> {
   return {
+    'auto-sent': {
+      title: 'Help is on the way',
+      color: c.safe,
+      help: 'Your emergency contacts have been texted your location automatically. Stay where you are if you can.',
+      ok: true,
+    },
+    'auto-partial': {
+      title: 'Some contacts alerted',
+      color: c.warning,
+      help: 'Part of the alert failed to send — signal may be weak. Check your messages, or call for help directly.',
+      ok: false,
+    },
     sent: {
       title: 'Contacts alerted',
       color: c.safe,
@@ -224,8 +236,8 @@ export function EmergencyOverlay({
 
           {phase === 'escalating' && (
             <View style={{ alignItems: 'center', paddingVertical: spacing(3) }}>
-              <Text style={styles.title}>Opening your messages…</Text>
-              <Text style={styles.help}>Hang tight — writing the alert for your contacts.</Text>
+              <Text style={styles.title}>Alerting your contacts…</Text>
+              <Text style={styles.help}>Sending your location now.</Text>
             </View>
           )}
 

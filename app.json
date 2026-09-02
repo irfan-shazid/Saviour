@@ -26,7 +26,8 @@
         "ACCESS_COARSE_LOCATION",
         "POST_NOTIFICATIONS",
         "WAKE_LOCK",
-        "VIBRATE"
+        "VIBRATE",
+        "SEND_SMS"
       ],
       "predictiveBackGestureEnabled": false
     },

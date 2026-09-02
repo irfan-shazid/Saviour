@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSettings } from '../context/SettingsContext';
 import { useThemedStyles, type ThemeState } from '../context/ThemeContext';
 import {
+  Banner,
   Button,
   Card,
   Field,
@@ -20,6 +21,11 @@ import {
   setAuthPromptDismissed,
 } from '../storage';
 import { authClient, authConfigured, useSession } from '../services/auth';
+import {
+  hasDirectSmsPermission,
+  isDirectSmsSupported,
+  requestDirectSmsPermission,
+} from '../../modules/direct-sms';
 import type { Incident, ThemePreference } from '../types';
 import { spacing } from '../theme';
 
@@ -136,6 +142,9 @@ export function SettingsScreen() {
       />
       <Text style={styles.hint}>{sensitivity.hint}</Text>
 
+      <SectionLabel>Sending alerts</SectionLabel>
+      <AutoSendSection />
+
       <SectionLabel>Alerts</SectionLabel>
       <Card style={styles.stack}>
         <ToggleRow
@@ -197,6 +206,77 @@ export function SettingsScreen() {
         />
       )}
     </ScrollView>
+  );
+}
+
+/**
+ * Explains, honestly, whether this build can text for help on its own — and
+ * lets the user grant SEND_SMS if it can. The three states are genuinely
+ * different products, so none of them is glossed over.
+ */
+function AutoSendSection() {
+  const styles = useThemedStyles(makeStyles);
+  const supported = isDirectSmsSupported();
+  const [granted, setGranted] = useState(() => hasDirectSmsPermission());
+  const [asking, setAsking] = useState(false);
+
+  const ask = async () => {
+    setAsking(true);
+    try {
+      const ok = await requestDirectSmsPermission();
+      setGranted(ok);
+      if (!ok) {
+        Alert.alert(
+          'Permission denied',
+          'Without SMS permission Saviour can only open your messaging app with the alert ready — someone still has to tap send. You can change this in Android app settings.'
+        );
+      }
+    } finally {
+      setAsking(false);
+    }
+  };
+
+  if (!supported) {
+    return (
+      <Banner
+        tone="info"
+        icon="ℹ️"
+        title="Alerts open your SMS app"
+        message={
+          Platform.OS === 'ios'
+            ? 'iOS does not let any app send a text without you confirming it, so the alert opens pre-written and pre-addressed — one tap to send.'
+            : 'Automatic sending needs a development build. In Expo Go the alert opens pre-written in your SMS app — one tap to send.'
+        }
+      />
+    );
+  }
+
+  if (granted) {
+    return (
+      <Banner
+        tone="safe"
+        icon="✅"
+        title="Alerts send automatically"
+        message="Saviour will text your contacts with no taps needed when the countdown ends."
+      />
+    );
+  }
+
+  return (
+    <Card>
+      <Text style={styles.accountName}>Send texts automatically</Text>
+      <Text style={styles.accountEmail}>
+        Right now the alert only opens your SMS app and waits for a tap. Grant SMS permission and
+        Saviour can text your contacts on its own — which matters most when you can’t reach your
+        phone.
+      </Text>
+      <Button
+        title="Allow Saviour to send SMS"
+        onPress={ask}
+        loading={asking}
+        style={{ marginTop: spacing(2) }}
+      />
+    </Card>
   );
 }
 

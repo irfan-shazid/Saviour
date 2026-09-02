@@ -23,12 +23,19 @@ import { genId, loadContacts, loadIncidents, upsertIncident } from '../storage';
 import type { Incident, IncidentSource, SmsOutcome } from '../types';
 import { EmergencyOverlay } from '../components/EmergencyOverlay';
 import { Banner, Button, Card, MountFade } from '../components/ui';
+import { hasDirectSmsPermission, isDirectSmsSupported } from '../../modules/direct-sms';
 import { relativeTime } from '../utils/format';
 import { radius, spacing } from '../theme';
 
 const KEEP_AWAKE_TAG = 'saviour-monitor';
 
-type Ready = { contacts: number; hasName: boolean; location: 'granted' | 'denied' | 'unknown' };
+type Ready = {
+  contacts: number;
+  hasName: boolean;
+  location: 'granted' | 'denied' | 'unknown';
+  /** True when the alert will go out with no user interaction at all. */
+  canAutoSend: boolean;
+};
 
 export function MonitorScreen() {
   const { settings } = useSettings();
@@ -39,7 +46,12 @@ export function MonitorScreen() {
   const [active, setActive] = useState<Incident | null>(null);
   const [busy, setBusy] = useState(false);
   const [backgrounded, setBackgrounded] = useState(false);
-  const [ready, setReady] = useState<Ready>({ contacts: 0, hasName: false, location: 'unknown' });
+  const [ready, setReady] = useState<Ready>({
+    contacts: 0,
+    hasName: false,
+    location: 'unknown',
+    canAutoSend: false,
+  });
   const [lastIncident, setLastIncident] = useState<Incident | null>(null);
 
   const pulse = useRef(new Animated.Value(0)).current;
@@ -56,6 +68,7 @@ export function MonitorScreen() {
       contacts: contacts.length,
       hasName: settings.name.trim().length > 0,
       location: perm ? (perm.granted ? 'granted' : 'denied') : 'unknown',
+      canAutoSend: isDirectSmsSupported() && hasDirectSmsPermission(),
     });
     setLastIncident(incidents[0] ?? null);
   }, [settings.name]);
@@ -223,7 +236,10 @@ export function MonitorScreen() {
     !ready.hasName && 'Add your name in Settings',
     ready.contacts === 0 && 'Add an emergency contact',
     ready.location !== 'granted' && 'Allow location access',
+    isDirectSmsSupported() && !ready.canAutoSend && 'Allow SMS to send alerts automatically',
   ].filter(Boolean) as string[];
+
+  const autoSends = ready.canAutoSend;
 
   const ringScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.9] });
   const ringOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.45, 0] });
@@ -319,7 +335,9 @@ export function MonitorScreen() {
           style={{ marginTop: spacing(2) }}
         />
         <Text style={styles.sosHint}>
-          Opens your SMS app with the alert written and addressed — just hit send.
+          {autoSends
+            ? 'Texts your contacts your location automatically — no tap needed.'
+            : 'Opens your SMS app with the alert written and addressed — just hit send.'}
         </Text>
       </MountFade>
 
