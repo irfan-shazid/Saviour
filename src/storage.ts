@@ -8,6 +8,7 @@ const KEYS = {
   settings: 'saviour.settings',
   contacts: 'saviour.contacts',
   incidents: 'saviour.incidents',
+  authPromptDismissed: 'saviour.authPromptDismissed',
 } as const;
 
 const MAX_HISTORY = 100;
@@ -20,6 +21,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoEscalateEnabled: true,
   medicalNote: '',
   sirenEnabled: true,
+  alarmSoundEnabled: true,
 };
 
 /** A best-effort unique id — no server to hand them out anymore. */
@@ -49,6 +51,21 @@ export async function loadSettings(): Promise<Settings> {
 
 export async function saveSettings(settings: Settings): Promise<void> {
   await writeJSON(KEYS.settings, settings);
+}
+
+// ---- Auth gate -----------------------------------------------------------
+
+/**
+ * Whether the user has chosen to carry on without an account. Accounts are
+ * optional here, so this is remembered and the prompt never nags again.
+ */
+export async function loadAuthPromptDismissed(): Promise<boolean> {
+  return (await AsyncStorage.getItem(KEYS.authPromptDismissed)) === '1';
+}
+
+export async function setAuthPromptDismissed(dismissed: boolean): Promise<void> {
+  if (dismissed) await AsyncStorage.setItem(KEYS.authPromptDismissed, '1');
+  else await AsyncStorage.removeItem(KEYS.authPromptDismissed);
 }
 
 // ---- Contacts ------------------------------------------------------------

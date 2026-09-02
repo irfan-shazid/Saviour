@@ -28,6 +28,8 @@ export interface Settings {
   medicalNote: string;
   /** Loud looping vibration alarm during the countdown. */
   sirenEnabled: boolean;
+  /** Audible siren played through the speaker during the countdown. */
+  alarmSoundEnabled: boolean;
 }
 
 export type IncidentStatus = 'PENDING' | 'SAFE' | 'EMERGENCY' | 'CANCELLED';

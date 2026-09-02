@@ -16,6 +16,7 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { useTheme, useThemedStyles, type ThemeState } from '../context/ThemeContext';
 import { radius, spacing } from '../theme';
@@ -264,23 +265,97 @@ export function Field({
 }
 
 /* ------------------------------------------------------------------ *
- * Card
+ * GlassView — a genuinely frosted pane: a real blur of whatever is
+ * behind it, a translucent wash, a hairline edge, and a specular
+ * highlight along the top.
+ *
+ * Real blur is comparatively expensive (and experimental on Android), so
+ * this is reserved for the few large, prominent surfaces — the tab bar,
+ * the monitor hero, the emergency sheet. Everything else uses `Card`,
+ * which is translucent over the same aurora background and so reads as
+ * the same material without the per-frame cost.
+ * ------------------------------------------------------------------ */
+export function GlassView({
+  children,
+  style,
+  intensity = 36,
+  strong = false,
+  cornerRadius = radius.lg,
+}: {
+  children?: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+  intensity?: number;
+  /** Heavier wash, for panes that must stay legible over busy content. */
+  strong?: boolean;
+  cornerRadius?: number;
+}) {
+  const { colors } = useTheme();
+  return (
+    <View
+      style={[
+        {
+          borderRadius: cornerRadius,
+          overflow: 'hidden',
+          borderWidth: 1,
+          borderColor: colors.glassBorder,
+        },
+        style,
+      ]}
+    >
+      <BlurView
+        intensity={intensity}
+        tint={colors.blurTint}
+        experimentalBlurMethod="dimezisBlurView"
+        style={StyleSheet.absoluteFill}
+      />
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          { backgroundColor: strong ? colors.glassFillStrong : colors.glassFill },
+        ]}
+      />
+      <View style={[styles_highlight.line, { backgroundColor: colors.glassHighlight }]} />
+      {children}
+    </View>
+  );
+}
+
+const styles_highlight = StyleSheet.create({
+  line: { position: 'absolute', top: 0, left: 12, right: 12, height: 1, opacity: 0.6 },
+});
+
+/* ------------------------------------------------------------------ *
+ * Card — the default translucent pane.
  * ------------------------------------------------------------------ */
 export function Card({
   children,
   style,
   padded = true,
   elevated = false,
+  blur = false,
 }: {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   padded?: boolean;
   elevated?: boolean;
+  /** Upgrade to a real frosted pane. Use sparingly — see GlassView. */
+  blur?: boolean;
 }) {
-  const { shadow } = useTheme();
+  const { colors, shadow } = useTheme();
   const s = useThemedStyles(makeStyles);
+  const padding = padded ? { padding: spacing(2) } : null;
+
+  if (blur) {
+    return (
+      <GlassView style={[elevated && shadow.card, style]}>
+        <View style={padding}>{children}</View>
+      </GlassView>
+    );
+  }
+
   return (
-    <View style={[s.card, padded && { padding: spacing(2) }, elevated && shadow.card, style]}>
+    <View style={[s.card, padding, elevated && shadow.card, style]}>
+      <View style={[styles_highlight.line, { backgroundColor: colors.glassHighlight }]} />
       {children}
     </View>
   );
@@ -534,10 +609,11 @@ const makeStyles = ({ colors, type }: ThemeState) =>
     helperText: { color: colors.textFaint, fontSize: 12, marginTop: 6 },
     errorText: { color: colors.dangerHi, fontSize: 12, marginTop: 6, fontWeight: '600' },
     card: {
-      backgroundColor: colors.surface,
+      backgroundColor: colors.glassFill,
       borderRadius: radius.lg,
       borderWidth: 1,
-      borderColor: colors.borderSoft,
+      borderColor: colors.glassBorder,
+      overflow: 'hidden',
     },
     section: { ...type.label, marginTop: spacing(2.5), marginBottom: spacing(1) },
     segmented: {

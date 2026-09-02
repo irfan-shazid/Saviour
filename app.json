@@ -3,6 +3,7 @@
     "name": "Saviour",
     "slug": "Saviour",
     "version": "1.0.0",
+    "scheme": "saviour",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -44,7 +45,11 @@
         {
           "color": "#EF4444"
         }
-      ]
+      ],
+      "expo-audio",
+      "expo-secure-store",
+      "expo-web-browser",
+      "expo-asset"
     ]
   }
 }

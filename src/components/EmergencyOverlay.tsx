@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Linking, Modal, Platform, StyleSheet, Text, Vibration, View } from 'react-native';
+import { Animated, Linking, Modal, Platform, StyleSheet, Text, View } from 'react-native';
+import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
+import { useAlarm } from '../services/alarm';
 import type { Incident, SmsOutcome } from '../types';
 import { radius, spacing, type Palette } from '../theme';
 import { useTheme, useThemedStyles, type ThemeState } from '../context/ThemeContext';
@@ -47,8 +49,6 @@ function outcomeCopy(
   };
 }
 
-const ALARM_PATTERN = [0, 600, 400, 600, 400];
-
 /**
  * Full-screen "Are you OK?" overlay shown the moment a fall is detected.
  * Counts down from the incident's grace period. If the user does not tap
@@ -62,6 +62,7 @@ export function EmergencyOverlay({
   onSafe,
   autoEscalate = true,
   siren = true,
+  alarmSound = true,
   test = false,
 }: {
   incident: Incident;
@@ -74,6 +75,8 @@ export function EmergencyOverlay({
   autoEscalate?: boolean;
   /** Loud looping vibration alarm during the countdown. */
   siren?: boolean;
+  /** Audible siren through the speaker during the countdown. */
+  alarmSound?: boolean;
   /** Preview the flow without creating real alerts (Settings → Test alarm). */
   test?: boolean;
 }) {
@@ -98,15 +101,14 @@ export function EmergencyOverlay({
     Animated.spring(enter, { toValue: 1, speed: 12, bounciness: 7, useNativeDriver: true }).start();
   }, [enter]);
 
-  const stopAlarm = useCallback(() => Vibration.cancel(), []);
+  // The alarm runs only while the user still has to respond; escalating or
+  // marking safe silences it immediately.
+  const alarming = phase === 'countdown' || phase === 'waiting';
+  useAlarm({ active: alarming, sound: alarmSound, vibrate: siren });
 
-  // Alarm buzz while the prompt is up.
   useEffect(() => {
-    if (siren) Vibration.vibrate(ALARM_PATTERN, true);
-    else Vibration.vibrate(400);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
-    return stopAlarm;
-  }, [siren, stopAlarm]);
+  }, []);
 
   // Countdown tick.
   useEffect(() => {
@@ -125,8 +127,7 @@ export function EmergencyOverlay({
   async function escalate() {
     if (escalatedRef.current) return;
     escalatedRef.current = true;
-    setPhase('escalating');
-    stopAlarm();
+    setPhase('escalating'); // leaving the countdown phase silences the alarm
     try {
       const result = test ? 'sent' : (await onEscalate?.()) ?? 'unavailable';
       setOutcome(result);
@@ -143,11 +144,12 @@ export function EmergencyOverlay({
   }
 
   async function markSafe() {
-    stopAlarm();
+    // Switch phase first so the siren cuts out the instant they tap, rather
+    // than ringing on through the write to disk.
+    setPhase('safe');
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     try {
       if (!test) await onSafe?.();
-      setPhase('safe');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       setTimeout(onClose, 1400);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to update');
@@ -169,6 +171,13 @@ export function EmergencyOverlay({
   return (
     <Modal visible animationType="fade" transparent statusBarTranslucent onRequestClose={() => {}}>
       <View style={styles.backdrop}>
+        <BlurView
+          intensity={40}
+          tint={colors.blurTint}
+          experimentalBlurMethod="dimezisBlurView"
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }]} />
         <Animated.View
           style={[
             styles.sheet,
@@ -262,7 +271,6 @@ const makeStyles = ({ colors, type }: ThemeState) =>
   StyleSheet.create({
     backdrop: {
       flex: 1,
-      backgroundColor: colors.overlay,
       alignItems: 'center',
       justifyContent: 'center',
       padding: spacing(3),
@@ -270,12 +278,15 @@ const makeStyles = ({ colors, type }: ThemeState) =>
     sheet: {
       width: '100%',
       maxWidth: 420,
-      backgroundColor: colors.surface,
+      // Opaque-enough wash: this is the one screen that must stay readable
+      // at a glance no matter what is behind it.
+      backgroundColor: colors.glassFillStrong,
       borderRadius: radius.xl,
       borderWidth: 1,
       borderColor: colors.danger,
       padding: spacing(3),
       alignItems: 'center',
+      overflow: 'hidden',
     },
     kicker: { color: colors.dangerHi, fontWeight: '900', letterSpacing: 1.5, fontSize: 12 },
     testTag: {

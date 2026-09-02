@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SettingsProvider } from './src/context/SettingsContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
-import { RootNavigator } from './src/navigation/RootNavigator';
+import { AuthGate } from './src/navigation/AuthGate';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { initNotifications } from './src/services/notifications';
 
@@ -38,7 +38,7 @@ function Themed() {
   return (
     <>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-      <RootNavigator />
+      <AuthGate />
     </>
   );
 }

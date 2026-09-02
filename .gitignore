@@ -15,6 +15,16 @@ dist/
 *.mobileprovision
 *.pem
 
+# secrets & local config
+.env
+.env.local
+server/.env
+
+# auth server database
+server/*.db
+server/*.db-shm
+server/*.db-wal
+
 # logs & os
 *.log
 npm-debug.*

@@ -238,7 +238,7 @@ export function MonitorScreen() {
       </MountFade>
 
       <MountFade delay={60}>
-        <Card elevated style={styles.hero}>
+        <Card elevated blur style={styles.hero}>
           <View style={styles.beaconBox}>
             {monitoring && (
               <>
@@ -340,6 +340,7 @@ export function MonitorScreen() {
           incident={active}
           autoEscalate={settings.autoEscalateEnabled}
           siren={settings.sirenEnabled}
+          alarmSound={settings.alarmSoundEnabled}
           onEscalate={handleEscalate}
           onSafe={handleSafe}
           onClose={closeActive}

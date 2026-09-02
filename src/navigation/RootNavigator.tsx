@@ -12,6 +12,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useSettings } from '../context/SettingsContext';
 import { useTheme, useThemedStyles, type ThemeState } from '../context/ThemeContext';
+import { AppBackground } from '../components/AppBackground';
+import { GlassView } from '../components/ui';
 import { MonitorScreen } from '../screens/MonitorScreen';
 import { ContactsScreen } from '../screens/ContactsScreen';
 import { IncidentsScreen } from '../screens/IncidentsScreen';
@@ -84,6 +86,7 @@ export function RootNavigator() {
   if (loading) {
     return (
       <View style={styles.center}>
+        <AppBackground />
         <ActivityIndicator color={colors.primary} size="large" />
         <Text style={styles.loadingText}>Saviour</Text>
       </View>
@@ -91,27 +94,32 @@ export function RootNavigator() {
   }
 
   return (
-    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
-      <Animated.View style={{ flex: 1, opacity: fade, transform: [{ translateX: slide }] }}>
-        {tab === 'monitor' && <MonitorScreen />}
-        {tab === 'contacts' && <ContactsScreen />}
-        {tab === 'incidents' && <IncidentsScreen />}
-        {tab === 'settings' && <SettingsScreen />}
-      </Animated.View>
+    <View style={styles.root}>
+      <AppBackground />
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <Animated.View style={{ flex: 1, opacity: fade, transform: [{ translateX: slide }] }}>
+          {tab === 'monitor' && <MonitorScreen />}
+          {tab === 'contacts' && <ContactsScreen />}
+          {tab === 'incidents' && <IncidentsScreen />}
+          {tab === 'settings' && <SettingsScreen />}
+        </Animated.View>
 
-      <View style={styles.tabBar}>
-        {TABS.map((t) => (
-          <TabButton
-            key={t.key}
-            icon={t.icon}
-            label={t.label}
-            active={tab === t.key}
-            showDot={t.key === 'contacts' && needsContact}
-            onPress={() => switchTab(t.key)}
-          />
-        ))}
-      </View>
-    </SafeAreaView>
+        <GlassView strong intensity={48} cornerRadius={26} style={styles.tabBar}>
+          <View style={styles.tabRow}>
+            {TABS.map((t) => (
+              <TabButton
+                key={t.key}
+                icon={t.icon}
+                label={t.label}
+                active={tab === t.key}
+                showDot={t.key === 'contacts' && needsContact}
+                onPress={() => switchTab(t.key)}
+              />
+            ))}
+          </View>
+        </GlassView>
+      </SafeAreaView>
+    </View>
   );
 }
 
@@ -195,6 +203,7 @@ function TabButton({
 const makeStyles = ({ colors, type }: ThemeState) =>
   StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.bg },
+    safe: { flex: 1 },
     center: {
       flex: 1,
       alignItems: 'center',
@@ -203,13 +212,16 @@ const makeStyles = ({ colors, type }: ThemeState) =>
       gap: spacing(2),
     },
     loadingText: { ...type.label, color: colors.textFaint },
+    // Floats over the content as a frosted bar rather than sitting in a
+    // solid strip welded to the bottom edge.
     tabBar: {
+      marginHorizontal: spacing(1.5),
+      marginBottom: spacing(0.5),
+    },
+    tabRow: {
       flexDirection: 'row',
-      borderTopWidth: 1,
-      borderTopColor: colors.borderSoft,
-      backgroundColor: colors.bgElevated,
       paddingTop: spacing(1),
-      paddingBottom: spacing(0.5),
+      paddingBottom: spacing(1),
     },
     tab: { flex: 1, alignItems: 'center', paddingVertical: spacing(0.5) },
     iconWrap: {

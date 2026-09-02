@@ -49,6 +49,27 @@ export interface Palette {
 
   // Scrims
   overlay: string;
+
+  // --- Glassmorphism -----------------------------------------------------
+  // Frosted panels only read as glass when something colourful sits behind
+  // them, so the app paints a gradient plus soft aurora blobs and every
+  // surface is a translucent pane over it.
+  /** Translucent wash laid over the blur. */
+  glassFill: string;
+  /** Stronger wash for panes that need to stay legible (sheets, tab bar). */
+  glassFillStrong: string;
+  /** Hairline edge that catches the "light". */
+  glassBorder: string;
+  /** Brighter top edge, for the specular highlight along a pane's top. */
+  glassHighlight: string;
+  /** Which way expo-blur should tint. */
+  blurTint: 'light' | 'dark';
+  /** Base page gradient, top → bottom. */
+  bgGradient: [string, string];
+  /** Soft colour blobs behind the glass. */
+  auroraA: string;
+  auroraB: string;
+  auroraC: string;
 }
 
 /** Tuned for low-light glanceability with high-contrast safety accents. */
@@ -85,7 +106,17 @@ export const darkPalette: Palette = {
   onAccent: '#FFFFFF',
   onSafe: '#05231B',
 
-  overlay: 'rgba(5,8,16,0.94)',
+  overlay: 'rgba(5,8,16,0.72)',
+
+  glassFill: 'rgba(255,255,255,0.055)',
+  glassFillStrong: 'rgba(22,32,53,0.72)',
+  glassBorder: 'rgba(255,255,255,0.11)',
+  glassHighlight: 'rgba(255,255,255,0.22)',
+  blurTint: 'dark',
+  bgGradient: ['#070C17', '#0D1526'],
+  auroraA: 'rgba(59,130,246,0.30)',
+  auroraB: 'rgba(16,185,129,0.20)',
+  auroraC: 'rgba(139,92,246,0.22)',
 };
 
 /**
@@ -125,7 +156,17 @@ export const lightPalette: Palette = {
   onAccent: '#FFFFFF',
   onSafe: '#FFFFFF',
 
-  overlay: 'rgba(12,20,35,0.72)',
+  overlay: 'rgba(12,20,35,0.55)',
+
+  glassFill: 'rgba(255,255,255,0.58)',
+  glassFillStrong: 'rgba(255,255,255,0.85)',
+  glassBorder: 'rgba(255,255,255,0.85)',
+  glassHighlight: 'rgba(255,255,255,0.98)',
+  blurTint: 'light',
+  bgGradient: ['#EAF1FC', '#F7FAFE'],
+  auroraA: 'rgba(37,99,235,0.20)',
+  auroraB: 'rgba(5,150,105,0.15)',
+  auroraC: 'rgba(139,92,246,0.16)',
 };
 
 export const palettes: Record<Scheme, Palette> = {

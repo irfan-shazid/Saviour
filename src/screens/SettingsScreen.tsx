@@ -12,7 +12,14 @@ import {
   ToggleRow,
 } from '../components/ui';
 import { EmergencyOverlay } from '../components/EmergencyOverlay';
-import { DEFAULT_SETTINGS, clearAllData, clearIncidents, genId } from '../storage';
+import {
+  DEFAULT_SETTINGS,
+  clearAllData,
+  clearIncidents,
+  genId,
+  setAuthPromptDismissed,
+} from '../storage';
+import { authClient, authConfigured, useSession } from '../services/auth';
 import type { Incident, ThemePreference } from '../types';
 import { spacing } from '../theme';
 
@@ -139,8 +146,15 @@ export function SettingsScreen() {
         />
         <View style={styles.divider} />
         <ToggleRow
-          title="Alarm siren"
-          description="Loud looping vibration during the countdown"
+          title="Alarm sound"
+          description="Play a loud siren through the speaker so people nearby hear it"
+          value={settings.alarmSoundEnabled}
+          onValueChange={(v) => update({ alarmSoundEnabled: v })}
+        />
+        <View style={styles.divider} />
+        <ToggleRow
+          title="Vibration alarm"
+          description="Loud looping buzz during the countdown"
           value={settings.sirenEnabled}
           onValueChange={(v) => update({ sirenEnabled: v })}
         />
@@ -154,6 +168,8 @@ export function SettingsScreen() {
         style={{ marginTop: spacing(2) }}
       />
       <Text style={styles.hint}>Previews the countdown. No contacts are alerted.</Text>
+
+      {authConfigured && <AccountSection />}
 
       <SectionLabel>Data</SectionLabel>
       <Button title="Clear incident history" variant="ghost" size="md" onPress={confirmClearHistory} />
@@ -176,6 +192,7 @@ export function SettingsScreen() {
           test
           incident={testIncident}
           siren={settings.sirenEnabled}
+          alarmSound={settings.alarmSoundEnabled}
           onClose={() => setTestIncident(null)}
         />
       )}
@@ -183,9 +200,67 @@ export function SettingsScreen() {
   );
 }
 
-const makeStyles = ({ colors }: ThemeState) =>
+/**
+ * Only rendered when an auth server is configured. Signing out returns the
+ * user to the account screen; the on-device data is untouched either way.
+ */
+function AccountSection() {
+  const styles = useThemedStyles(makeStyles);
+  const { data } = useSession();
+  const [busy, setBusy] = useState(false);
+
+  const confirmSignOut = () =>
+    Alert.alert('Sign out?', 'Your contacts, settings and history stay on this device.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign out',
+        style: 'destructive',
+        onPress: async () => {
+          setBusy(true);
+          try {
+            await authClient.signOut();
+            await setAuthPromptDismissed(false);
+          } catch {
+            Alert.alert('Could not sign out', 'Check your connection and try again.');
+          } finally {
+            setBusy(false);
+          }
+        },
+      },
+    ]);
+
+  return (
+    <>
+      <SectionLabel>Account</SectionLabel>
+      {data?.user ? (
+        <Card>
+          <Text style={styles.accountName}>{data.user.name || data.user.email}</Text>
+          <Text style={styles.accountEmail}>{data.user.email}</Text>
+          <Button
+            title="Sign out"
+            variant="ghost"
+            size="md"
+            onPress={confirmSignOut}
+            loading={busy}
+            style={{ marginTop: spacing(2) }}
+          />
+        </Card>
+      ) : (
+        <Card>
+          <Text style={styles.accountEmail}>
+            Not signed in. Saviour is running local-only — everything still works.
+          </Text>
+        </Card>
+      )}
+    </>
+  );
+}
+
+const makeStyles = ({ colors, type }: ThemeState) =>
   StyleSheet.create({
     container: { padding: spacing(2), paddingBottom: spacing(6) },
+    accountName: { ...type.h3 },
+    accountEmail: { color: colors.textMuted, fontSize: 13, marginTop: 2, lineHeight: 18 },
     stack: { gap: spacing(2) },
     divider: { height: 1, backgroundColor: colors.borderSoft },
     hint: { color: colors.textFaint, fontSize: 12, marginTop: 8, lineHeight: 17 },
