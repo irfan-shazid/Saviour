@@ -3,6 +3,7 @@ import { Platform, UIManager } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SettingsProvider } from './src/context/SettingsContext';
+import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { initNotifications } from './src/services/notifications';
@@ -22,10 +23,22 @@ export default function App() {
     <ErrorBoundary>
       <SafeAreaProvider>
         <SettingsProvider>
-          <StatusBar style="light" />
-          <RootNavigator />
+          <ThemeProvider>
+            <Themed />
+          </ThemeProvider>
         </SettingsProvider>
       </SafeAreaProvider>
     </ErrorBoundary>
+  );
+}
+
+/** Split out so the status bar can read the resolved theme from context. */
+function Themed() {
+  const { scheme } = useTheme();
+  return (
+    <>
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+      <RootNavigator />
+    </>
   );
 }

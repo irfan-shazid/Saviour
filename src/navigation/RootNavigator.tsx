@@ -11,12 +11,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useSettings } from '../context/SettingsContext';
+import { useTheme, useThemedStyles, type ThemeState } from '../context/ThemeContext';
 import { MonitorScreen } from '../screens/MonitorScreen';
 import { ContactsScreen } from '../screens/ContactsScreen';
 import { IncidentsScreen } from '../screens/IncidentsScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { loadContacts } from '../storage';
-import { colors, spacing, type } from '../theme';
+import { spacing } from '../theme';
 
 type Tab = 'monitor' | 'contacts' | 'incidents' | 'settings';
 
@@ -29,6 +30,9 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
 
 export function RootNavigator() {
   const { loading } = useSettings();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+
   const [tab, setTab] = useState<Tab>('monitor');
   const [needsContact, setNeedsContact] = useState(false);
 
@@ -52,7 +56,8 @@ export function RootNavigator() {
       Haptics.selectionAsync().catch(() => {});
       refreshBadges();
 
-      const dir = TABS.findIndex((t) => t.key === next) > TABS.findIndex((t) => t.key === tab) ? 1 : -1;
+      const dir =
+        TABS.findIndex((t) => t.key === next) > TABS.findIndex((t) => t.key === tab) ? 1 : -1;
 
       Animated.timing(fade, {
         toValue: 0,
@@ -69,12 +74,7 @@ export function RootNavigator() {
             easing: Easing.out(Easing.cubic),
             useNativeDriver: true,
           }),
-          Animated.spring(slide, {
-            toValue: 0,
-            speed: 14,
-            bounciness: 4,
-            useNativeDriver: true,
-          }),
+          Animated.spring(slide, { toValue: 0, speed: 14, bounciness: 4, useNativeDriver: true }),
         ]).start();
       });
     },
@@ -92,9 +92,7 @@ export function RootNavigator() {
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
-      <Animated.View
-        style={{ flex: 1, opacity: fade, transform: [{ translateX: slide }] }}
-      >
+      <Animated.View style={{ flex: 1, opacity: fade, transform: [{ translateX: slide }] }}>
         {tab === 'monitor' && <MonitorScreen />}
         {tab === 'contacts' && <ContactsScreen />}
         {tab === 'incidents' && <IncidentsScreen />}
@@ -133,6 +131,9 @@ function TabButton({
   showDot: boolean;
   onPress: () => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+
   const a = useRef(new Animated.Value(active ? 1 : 0)).current;
   const press = useRef(new Animated.Value(1)).current;
 
@@ -191,46 +192,53 @@ function TabButton({
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg, gap: spacing(2) },
-  loadingText: { ...type.label, color: colors.textFaint },
-  tabBar: {
-    flexDirection: 'row',
-    borderTopWidth: 1,
-    borderTopColor: colors.borderSoft,
-    backgroundColor: colors.bgElevated,
-    paddingTop: spacing(1),
-    paddingBottom: spacing(0.5),
-  },
-  tab: { flex: 1, alignItems: 'center', paddingVertical: spacing(0.5) },
-  iconWrap: {
-    width: 52,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconPill: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderRadius: 15,
-    backgroundColor: colors.primarySoft,
-  },
-  tabIcon: { fontSize: 18 },
-  tabLabel: { color: colors.textFaint, fontSize: 11, fontWeight: '700', marginTop: 3 },
-  dot: {
-    position: 'absolute',
-    top: 2,
-    right: 10,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.danger,
-    borderWidth: 1,
-    borderColor: colors.bgElevated,
-  },
-});
+const makeStyles = ({ colors, type }: ThemeState) =>
+  StyleSheet.create({
+    root: { flex: 1, backgroundColor: colors.bg },
+    center: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.bg,
+      gap: spacing(2),
+    },
+    loadingText: { ...type.label, color: colors.textFaint },
+    tabBar: {
+      flexDirection: 'row',
+      borderTopWidth: 1,
+      borderTopColor: colors.borderSoft,
+      backgroundColor: colors.bgElevated,
+      paddingTop: spacing(1),
+      paddingBottom: spacing(0.5),
+    },
+    tab: { flex: 1, alignItems: 'center', paddingVertical: spacing(0.5) },
+    iconWrap: {
+      width: 52,
+      height: 30,
+      borderRadius: 15,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    iconPill: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      borderRadius: 15,
+      backgroundColor: colors.primarySoft,
+    },
+    tabIcon: { fontSize: 18 },
+    tabLabel: { color: colors.textFaint, fontSize: 11, fontWeight: '700', marginTop: 3 },
+    dot: {
+      position: 'absolute',
+      top: 2,
+      right: 10,
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: colors.danger,
+      borderWidth: 1,
+      borderColor: colors.bgElevated,
+    },
+  });

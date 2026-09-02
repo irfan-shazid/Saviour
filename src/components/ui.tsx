@@ -8,6 +8,7 @@ import {
   Pressable,
   StyleProp,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TextInputProps,
@@ -16,13 +17,13 @@ import {
   ViewStyle,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { colors, radius, shadow, spacing, type } from '../theme';
+import { useTheme, useThemedStyles, type ThemeState } from '../context/ThemeContext';
+import { radius, spacing } from '../theme';
 
 /* ------------------------------------------------------------------ *
  * smoothLayout — one call before a setState that changes layout
  * (list add/remove/reorder, a form expanding) so the change eases
- * into place instead of snapping. Cheaper and lighter than pulling in
- * Reanimated for what is mostly height/position tweening.
+ * into place instead of snapping.
  * ------------------------------------------------------------------ */
 export function smoothLayout(duration = 240) {
   LayoutAnimation.configureNext({
@@ -34,9 +35,8 @@ export function smoothLayout(duration = 240) {
 }
 
 /* ------------------------------------------------------------------ *
- * MountFade — fades + lifts its children in on first render. Used to
- * stagger a screen's cards so content arrives instead of blinking on.
- * Native-driven, so it stays at 60fps even during nav transitions.
+ * MountFade — fades + lifts its children in on first render, so a
+ * screen's content arrives instead of blinking on.
  * ------------------------------------------------------------------ */
 export function MountFade({
   children,
@@ -96,7 +96,7 @@ function AnimatedPressable({
   disabled?: boolean;
   haptic?: 'selection' | 'medium' | 'none';
   scaleTo?: number;
-  style?: StyleProp<ViewStyle> | ((s: { pressed: boolean }) => StyleProp<ViewStyle>);
+  style?: StyleProp<ViewStyle>;
   children: React.ReactNode;
   accessibilityRole?: AccessibilityRole;
   accessibilityLabel?: string;
@@ -120,7 +120,7 @@ function AnimatedPressable({
       accessibilityRole={accessibilityRole}
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled: !!disabled }}
-      style={style as StyleProp<ViewStyle>}
+      style={style}
     >
       <Animated.View style={{ transform: [{ scale }] }}>{children}</Animated.View>
     </Pressable>
@@ -151,10 +151,13 @@ export function Button({
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
+  const { colors, shadow } = useTheme();
+  const s = useThemedStyles(makeStyles);
+
   const palette: Record<ButtonVariant, { bg: string; fg: string; border?: string }> = {
-    primary: { bg: colors.primary, fg: '#fff' },
-    danger: { bg: colors.danger, fg: '#fff' },
-    safe: { bg: colors.safe, fg: '#05231B' },
+    primary: { bg: colors.primary, fg: colors.onAccent },
+    danger: { bg: colors.danger, fg: colors.onAccent },
+    safe: { bg: colors.safe, fg: colors.onSafe },
     ghost: { bg: 'transparent', fg: colors.text, border: colors.border },
     subtle: { bg: colors.surfaceHi, fg: colors.text },
   };
@@ -173,7 +176,7 @@ export function Button({
     >
       <View
         style={[
-          styles.button,
+          s.button,
           {
             height,
             backgroundColor: p.bg,
@@ -187,7 +190,7 @@ export function Button({
         {loading ? (
           <ActivityIndicator color={p.fg} />
         ) : (
-          <Text style={[styles.buttonText, { color: p.fg, fontSize }]}>
+          <Text style={[s.buttonText, { color: p.fg, fontSize }]}>
             {icon ? `${icon}  ` : ''}
             {title}
           </Text>
@@ -204,8 +207,8 @@ export function IconButton({
   glyph,
   onPress,
   label,
-  tint = colors.text,
-  bg = colors.surfaceHi,
+  tint,
+  bg,
   disabled,
 }: {
   glyph: string;
@@ -215,10 +218,17 @@ export function IconButton({
   bg?: string;
   disabled?: boolean;
 }) {
+  const { colors } = useTheme();
+  const s = useThemedStyles(makeStyles);
   return (
     <AnimatedPressable onPress={onPress} disabled={disabled} accessibilityLabel={label} scaleTo={0.9}>
-      <View style={[styles.iconButton, { backgroundColor: bg, opacity: disabled ? 0.4 : 1 }]}>
-        <Text style={{ fontSize: 16, color: tint }}>{glyph}</Text>
+      <View
+        style={[
+          s.iconButton,
+          { backgroundColor: bg ?? colors.surfaceHi, opacity: disabled ? 0.4 : 1 },
+        ]}
+      >
+        <Text style={{ fontSize: 16, color: tint ?? colors.text }}>{glyph}</Text>
       </View>
     </AnimatedPressable>
   );
@@ -234,18 +244,20 @@ export function Field({
   style,
   ...props
 }: TextInputProps & { label?: string; helper?: string; error?: string | null }) {
+  const { colors } = useTheme();
+  const s = useThemedStyles(makeStyles);
   return (
     <View style={[{ marginBottom: spacing(2) }, style as StyleProp<ViewStyle>]}>
-      {label ? <Text style={styles.label}>{label}</Text> : null}
+      {label ? <Text style={s.label}>{label}</Text> : null}
       <TextInput
         placeholderTextColor={colors.textFaint}
-        style={[styles.input, !!error && { borderColor: colors.danger }]}
+        style={[s.input, !!error && { borderColor: colors.danger }]}
         {...props}
       />
       {error ? (
-        <Text style={styles.errorText}>{error}</Text>
+        <Text style={s.errorText}>{error}</Text>
       ) : helper ? (
-        <Text style={styles.helperText}>{helper}</Text>
+        <Text style={s.helperText}>{helper}</Text>
       ) : null}
     </View>
   );
@@ -265,15 +277,10 @@ export function Card({
   padded?: boolean;
   elevated?: boolean;
 }) {
+  const { shadow } = useTheme();
+  const s = useThemedStyles(makeStyles);
   return (
-    <View
-      style={[
-        styles.card,
-        padded && { padding: spacing(2) },
-        elevated && shadow.card,
-        style,
-      ]}
-    >
+    <View style={[s.card, padded && { padding: spacing(2) }, elevated && shadow.card, style]}>
       {children}
     </View>
   );
@@ -282,36 +289,93 @@ export function Card({
 /* ------------------------------------------------------------------ *
  * SectionLabel
  * ------------------------------------------------------------------ */
-export function SectionLabel({ children, style }: { children: React.ReactNode; style?: StyleProp<TextStyle> }) {
-  return <Text style={[styles.section, style]}>{children}</Text>;
+export function SectionLabel({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: StyleProp<TextStyle>;
+}) {
+  const s = useThemedStyles(makeStyles);
+  return <Text style={[s.section, style]}>{children}</Text>;
 }
 
 /* ------------------------------------------------------------------ *
- * Chip — selectable pill.
+ * Segmented — one-of-N picker. Replaces scattered chip rows so related
+ * choices read as a single control.
  * ------------------------------------------------------------------ */
-export function Chip({
-  label,
-  active,
-  onPress,
-  wide,
+export function Segmented<T extends string | number>({
+  options,
+  value,
+  onChange,
 }: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-  wide?: boolean;
+  options: { label: string; value: T }[];
+  value: T;
+  onChange: (v: T) => void;
 }) {
+  const { colors, shadow } = useTheme();
+  const s = useThemedStyles(makeStyles);
   return (
-    <AnimatedPressable onPress={onPress} accessibilityLabel={label} accessibilityRole="radio" scaleTo={0.94}>
-      <View
-        style={[
-          styles.chip,
-          wide && { alignSelf: 'stretch', alignItems: 'center' },
-          active && { backgroundColor: colors.primary, borderColor: colors.primary },
-        ]}
-      >
-        <Text style={[styles.chipText, active && { color: '#fff' }]}>{label}</Text>
+    <View style={s.segmented}>
+      {options.map((o) => {
+        const active = o.value === value;
+        return (
+          <Pressable
+            key={String(o.value)}
+            onPress={() => {
+              if (active) return;
+              Haptics.selectionAsync().catch(() => {});
+              onChange(o.value);
+            }}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={o.label}
+            style={[
+              s.segment,
+              active && { backgroundColor: colors.surface },
+              active && shadow.card,
+            ]}
+          >
+            <Text style={[s.segmentText, active && { color: colors.text }]}>{o.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * ToggleRow — title + description + switch, the shape most settings take.
+ * ------------------------------------------------------------------ */
+export function ToggleRow({
+  title,
+  description,
+  value,
+  onValueChange,
+}: {
+  title: string;
+  description?: string;
+  value: boolean;
+  onValueChange: (v: boolean) => void;
+}) {
+  const { colors } = useTheme();
+  const s = useThemedStyles(makeStyles);
+  return (
+    <View style={s.toggleRow}>
+      <View style={{ flex: 1 }}>
+        <Text style={s.toggleTitle}>{title}</Text>
+        {description ? <Text style={s.toggleDesc}>{description}</Text> : null}
       </View>
-    </AnimatedPressable>
+      <Switch
+        value={value}
+        onValueChange={(v) => {
+          Haptics.selectionAsync().catch(() => {});
+          onValueChange(v);
+        }}
+        trackColor={{ true: colors.safe, false: colors.border }}
+        thumbColor="#fff"
+      />
+    </View>
   );
 }
 
@@ -319,10 +383,12 @@ export function Chip({
  * Badge — small status pill.
  * ------------------------------------------------------------------ */
 export function Badge({ text, color }: { text: string; color: string }) {
+  const { tint } = useTheme();
+  const s = useThemedStyles(makeStyles);
   return (
-    <View style={[styles.badge, { backgroundColor: color + '22', borderColor: color + '55' }]}>
-      <View style={[styles.badgeDot, { backgroundColor: color }]} />
-      <Text style={[styles.badgeText, { color }]}>{text}</Text>
+    <View style={[s.badge, { backgroundColor: tint(color), borderColor: tint(color, 'edge') }]}>
+      <View style={[s.badgeDot, { backgroundColor: color }]} />
+      <Text style={[s.badgeText, { color }]}>{text}</Text>
     </View>
   );
 }
@@ -330,21 +396,31 @@ export function Badge({ text, color }: { text: string; color: string }) {
 /* ------------------------------------------------------------------ *
  * Avatar — initials circle.
  * ------------------------------------------------------------------ */
-export function Avatar({ initials, color = colors.primary, size = 44 }: { initials: string; color?: string; size?: number }) {
+export function Avatar({
+  initials,
+  color,
+  size = 44,
+}: {
+  initials: string;
+  color?: string;
+  size?: number;
+}) {
+  const { colors, tint } = useTheme();
+  const c = color ?? colors.primary;
   return (
     <View
       style={{
         width: size,
         height: size,
         borderRadius: size / 2,
-        backgroundColor: color + '22',
+        backgroundColor: tint(c),
         borderWidth: 1,
-        borderColor: color + '55',
+        borderColor: tint(c, 'edge'),
         alignItems: 'center',
         justifyContent: 'center',
       }}
     >
-      <Text style={{ color, fontWeight: '800', fontSize: size * 0.36 }}>{initials}</Text>
+      <Text style={{ color: c, fontWeight: '800', fontSize: size * 0.36 }}>{initials}</Text>
     </View>
   );
 }
@@ -367,6 +443,8 @@ export function Banner({
   actionLabel?: string;
   onAction?: () => void;
 }) {
+  const { colors, tint } = useTheme();
+  const s = useThemedStyles(makeStyles);
   const toneColor = {
     info: colors.primary,
     warning: colors.warning,
@@ -374,13 +452,13 @@ export function Banner({
     safe: colors.safe,
   }[tone];
   return (
-    <View style={[styles.banner, { borderColor: toneColor + '55', backgroundColor: toneColor + '14' }]}>
-      <Text style={styles.bannerIcon}>{icon ?? (tone === 'safe' ? '✅' : '⚠️')}</Text>
+    <View style={[s.banner, { borderColor: tint(toneColor, 'edge'), backgroundColor: tint(toneColor) }]}>
+      <Text style={s.bannerIcon}>{icon ?? (tone === 'safe' ? '✅' : '⚠️')}</Text>
       <View style={{ flex: 1 }}>
-        <Text style={[styles.bannerTitle, { color: toneColor }]}>{title}</Text>
-        {message ? <Text style={styles.bannerMsg}>{message}</Text> : null}
+        <Text style={[s.bannerTitle, { color: toneColor }]}>{title}</Text>
+        {message ? <Text style={s.bannerMsg}>{message}</Text> : null}
         {actionLabel && onAction ? (
-          <Text onPress={onAction} style={[styles.bannerAction, { color: toneColor }]}>
+          <Text onPress={onAction} style={[s.bannerAction, { color: toneColor }]}>
             {actionLabel} →
           </Text>
         ) : null}
@@ -392,12 +470,21 @@ export function Banner({
 /* ------------------------------------------------------------------ *
  * EmptyState
  * ------------------------------------------------------------------ */
-export function EmptyState({ icon, title, subtitle }: { icon: string; title: string; subtitle?: string }) {
+export function EmptyState({
+  icon,
+  title,
+  subtitle,
+}: {
+  icon: string;
+  title: string;
+  subtitle?: string;
+}) {
+  const s = useThemedStyles(makeStyles);
   return (
-    <View style={styles.empty}>
-      <Text style={styles.emptyIcon}>{icon}</Text>
-      <Text style={styles.emptyTitle}>{title}</Text>
-      {subtitle ? <Text style={styles.emptySub}>{subtitle}</Text> : null}
+    <View style={s.empty}>
+      <Text style={s.emptyIcon}>{icon}</Text>
+      <Text style={s.emptyTitle}>{title}</Text>
+      {subtitle ? <Text style={s.emptySub}>{subtitle}</Text> : null}
     </View>
   );
 }
@@ -406,82 +493,97 @@ export function EmptyState({ icon, title, subtitle }: { icon: string; title: str
  * ScreenHeader — consistent title block for every tab.
  * ------------------------------------------------------------------ */
 export function ScreenHeader({ title, subtitle }: { title: string; subtitle?: string }) {
+  const { type } = useTheme();
   return (
     <View style={{ marginBottom: spacing(2.5) }}>
       <Text style={type.h1}>{title}</Text>
-      {subtitle ? <Text style={[type.caption, { marginTop: 4, lineHeight: 20 }]}>{subtitle}</Text> : null}
+      {subtitle ? (
+        <Text style={[type.caption, { marginTop: 4, lineHeight: 20 }]}>{subtitle}</Text>
+      ) : null}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  button: {
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing(2),
-  },
-  buttonText: { fontWeight: '800', letterSpacing: 0.2 },
-  iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  label: { ...type.label, marginBottom: 8 },
-  input: {
-    backgroundColor: colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing(2),
-    minHeight: 50,
-    color: colors.text,
-    fontSize: 15,
-  },
-  helperText: { color: colors.textFaint, fontSize: 12, marginTop: 6 },
-  errorText: { color: colors.dangerHi, fontSize: 12, marginTop: 6, fontWeight: '600' },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.borderSoft,
-  },
-  section: { ...type.label, marginTop: spacing(2), marginBottom: spacing(1) },
-  chip: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceAlt,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: radius.pill,
-  },
-  chipText: { color: colors.text, fontWeight: '700', fontSize: 13 },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-  },
-  badgeDot: { width: 6, height: 6, borderRadius: 3 },
-  badgeText: { fontWeight: '800', fontSize: 11, letterSpacing: 0.5 },
-  banner: {
-    flexDirection: 'row',
-    gap: spacing(1.5),
-    borderWidth: 1,
-    borderRadius: radius.md,
-    padding: spacing(1.5),
-  },
-  bannerIcon: { fontSize: 16 },
-  bannerTitle: { fontWeight: '800', fontSize: 14 },
-  bannerMsg: { color: colors.textMuted, fontSize: 13, marginTop: 2, lineHeight: 18 },
-  bannerAction: { fontWeight: '800', fontSize: 13, marginTop: 8 },
-  empty: { alignItems: 'center', paddingVertical: spacing(5), paddingHorizontal: spacing(3) },
-  emptyIcon: { fontSize: 40, marginBottom: spacing(1.5) },
-  emptyTitle: { ...type.h3, textAlign: 'center' },
-  emptySub: { ...type.caption, textAlign: 'center', marginTop: 6, lineHeight: 20 },
-});
+const makeStyles = ({ colors, type }: ThemeState) =>
+  StyleSheet.create({
+    button: {
+      borderRadius: radius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: spacing(2),
+    },
+    buttonText: { fontWeight: '800', letterSpacing: 0.2 },
+    iconButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    label: { ...type.label, marginBottom: 8 },
+    input: {
+      backgroundColor: colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing(2),
+      minHeight: 50,
+      color: colors.text,
+      fontSize: 15,
+    },
+    helperText: { color: colors.textFaint, fontSize: 12, marginTop: 6 },
+    errorText: { color: colors.dangerHi, fontSize: 12, marginTop: 6, fontWeight: '600' },
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: colors.borderSoft,
+    },
+    section: { ...type.label, marginTop: spacing(2.5), marginBottom: spacing(1) },
+    segmented: {
+      flexDirection: 'row',
+      backgroundColor: colors.surfaceAlt,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.borderSoft,
+      padding: 4,
+      gap: 4,
+    },
+    segment: {
+      flex: 1,
+      paddingVertical: 10,
+      borderRadius: radius.sm,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    segmentText: { color: colors.textMuted, fontWeight: '700', fontSize: 13 },
+    toggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2) },
+    toggleTitle: { ...type.h3, fontSize: 15 },
+    toggleDesc: { color: colors.textMuted, marginTop: 2, fontSize: 13, lineHeight: 18 },
+    badge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: radius.pill,
+      borderWidth: 1,
+    },
+    badgeDot: { width: 6, height: 6, borderRadius: 3 },
+    badgeText: { fontWeight: '800', fontSize: 11, letterSpacing: 0.5 },
+    banner: {
+      flexDirection: 'row',
+      gap: spacing(1.5),
+      borderWidth: 1,
+      borderRadius: radius.md,
+      padding: spacing(1.5),
+    },
+    bannerIcon: { fontSize: 16 },
+    bannerTitle: { fontWeight: '800', fontSize: 14 },
+    bannerMsg: { color: colors.textMuted, fontSize: 13, marginTop: 2, lineHeight: 18 },
+    bannerAction: { fontWeight: '800', fontSize: 13, marginTop: 8 },
+    empty: { alignItems: 'center', paddingVertical: spacing(5), paddingHorizontal: spacing(3) },
+    emptyIcon: { fontSize: 40, marginBottom: spacing(1.5) },
+    emptyTitle: { ...type.h3, textAlign: 'center' },
+    emptySub: { ...type.caption, textAlign: 'center', marginTop: 6, lineHeight: 20 },
+  });

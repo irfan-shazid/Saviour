@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, FlatList, Linking, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { genId, loadContacts, saveContactOrder, saveContacts } from '../storage';
 import type { EmergencyContact } from '../types';
+import { useTheme, useThemedStyles, type ThemeState } from '../context/ThemeContext';
 import {
   Avatar,
   Badge,
@@ -15,12 +16,15 @@ import {
   smoothLayout,
 } from '../components/ui';
 import { initials, looksLikePhone, normalisePhone, telUri } from '../utils/format';
-import { colors, spacing, type } from '../theme';
+import { spacing } from '../theme';
 
 type Draft = { name: string; phone: string; relationship: string };
 const EMPTY: Draft = { name: '', phone: '', relationship: '' };
 
 export function ContactsScreen() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+
   const [contacts, setContacts] = useState<EmergencyContact[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -120,6 +124,8 @@ export function ContactsScreen() {
       Alert.alert('Cannot call', 'This device can’t place calls.')
     );
 
+  const ordered = contacts.length > 1;
+
   return (
     <FlatList
       contentContainerStyle={styles.container}
@@ -132,7 +138,11 @@ export function ContactsScreen() {
         <View>
           <ScreenHeader
             title="Emergency contacts"
-            subtitle="Texted your location, in priority order, when an incident escalates."
+            subtitle={
+              ordered
+                ? 'Texted your location in priority order when an incident escalates.'
+                : 'Texted your location when an incident escalates.'
+            }
           />
           <Card style={{ marginBottom: spacing(2) }}>
             <Text style={styles.formTitle}>{editingId ? 'Edit contact' : 'Add a contact'}</Text>
@@ -173,9 +183,6 @@ export function ContactsScreen() {
               />
             ) : null}
           </Card>
-          <Text style={styles.count}>
-            {contacts.length} saved{contacts.length > 1 ? ' · ordered by priority' : ''}
-          </Text>
         </View>
       }
       ListEmptyComponent={
@@ -189,63 +196,76 @@ export function ContactsScreen() {
       }
       renderItem={({ item, index }) => (
         <MountFade delay={Math.min(index, 6) * 45}>
-        <Card style={styles.row} padded={false}>
-          <View style={styles.rowMain}>
-            <Avatar initials={initials(item.name)} color={index === 0 ? colors.safe : colors.primary} />
-            <View style={{ flex: 1 }}>
-              <View style={styles.nameLine}>
-                <Text style={styles.name}>{item.name}</Text>
-                {index === 0 && <Badge text="PRIMARY" color={colors.safe} />}
+          <Card style={styles.row} padded={false}>
+            <View style={styles.rowMain}>
+              <Avatar
+                initials={initials(item.name)}
+                color={index === 0 && ordered ? colors.safe : colors.primary}
+              />
+              <View style={{ flex: 1 }}>
+                <View style={styles.nameLine}>
+                  <Text style={styles.name}>{item.name}</Text>
+                  {index === 0 && ordered && <Badge text="FIRST" color={colors.safe} />}
+                </View>
+                <Text style={styles.meta}>
+                  {item.phone}
+                  {item.relationship ? ` · ${item.relationship}` : ''}
+                </Text>
               </View>
-              <Text style={styles.meta}>
-                {item.phone}
-                {item.relationship ? ` · ${item.relationship}` : ''}
-              </Text>
             </View>
-          </View>
-          <View style={styles.actions}>
-            <IconButton glyph="↑" label="Move up" onPress={() => move(index, -1)} disabled={index === 0} />
-            <IconButton
-              glyph="↓"
-              label="Move down"
-              onPress={() => move(index, 1)}
-              disabled={index === contacts.length - 1}
-            />
-            <IconButton glyph="✏️" label="Edit" onPress={() => startEdit(item)} />
-            <IconButton
-              glyph="📞"
-              label={`Call ${item.name}`}
-              onPress={() => call(item)}
-              tint={colors.safeHi}
-            />
-            <IconButton
-              glyph="✕"
-              label={`Remove ${item.name}`}
-              onPress={() => remove(item)}
-              tint={colors.dangerHi}
-            />
-          </View>
-        </Card>
+            <View style={styles.actions}>
+              {ordered && (
+                <>
+                  <IconButton
+                    glyph="↑"
+                    label="Move up"
+                    onPress={() => move(index, -1)}
+                    disabled={index === 0}
+                  />
+                  <IconButton
+                    glyph="↓"
+                    label="Move down"
+                    onPress={() => move(index, 1)}
+                    disabled={index === contacts.length - 1}
+                  />
+                </>
+              )}
+              <View style={{ flex: 1 }} />
+              <IconButton glyph="✏️" label={`Edit ${item.name}`} onPress={() => startEdit(item)} />
+              <IconButton
+                glyph="📞"
+                label={`Call ${item.name}`}
+                onPress={() => call(item)}
+                tint={colors.safeHi}
+              />
+              <IconButton
+                glyph="✕"
+                label={`Remove ${item.name}`}
+                onPress={() => remove(item)}
+                tint={colors.dangerHi}
+              />
+            </View>
+          </Card>
         </MountFade>
       )}
     />
   );
 }
 
-const styles = StyleSheet.create({
-  container: { padding: spacing(2), paddingBottom: spacing(6) },
-  formTitle: { ...type.h3, marginBottom: spacing(1.5) },
-  count: { ...type.label, marginBottom: spacing(1) },
-  row: { marginBottom: spacing(1.5), overflow: 'hidden' },
-  rowMain: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), padding: spacing(2) },
-  nameLine: { flexDirection: 'row', alignItems: 'center', gap: spacing(1), flexWrap: 'wrap' },
-  name: { color: colors.text, fontWeight: '800', fontSize: 16 },
-  meta: { color: colors.textMuted, marginTop: 3, fontSize: 13 },
-  actions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing(0.5),
-    paddingHorizontal: spacing(1.5),
-    paddingBottom: spacing(1.5),
-  },
-});
+const makeStyles = ({ colors, type }: ThemeState) =>
+  StyleSheet.create({
+    container: { padding: spacing(2), paddingBottom: spacing(6) },
+    formTitle: { ...type.h3, marginBottom: spacing(1.5) },
+    row: { marginBottom: spacing(1.5), overflow: 'hidden' },
+    rowMain: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), padding: spacing(2) },
+    nameLine: { flexDirection: 'row', alignItems: 'center', gap: spacing(1), flexWrap: 'wrap' },
+    name: { color: colors.text, fontWeight: '800', fontSize: 16 },
+    meta: { color: colors.textMuted, marginTop: 3, fontSize: 13 },
+    actions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing(0.75),
+      paddingHorizontal: spacing(1.5),
+      paddingBottom: spacing(1.5),
+    },
+  });

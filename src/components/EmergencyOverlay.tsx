@@ -2,56 +2,58 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Linking, Modal, Platform, StyleSheet, Text, Vibration, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import type { Incident, SmsOutcome } from '../types';
-import { colors, radius, spacing, type } from '../theme';
+import { radius, spacing, type Palette } from '../theme';
+import { useTheme, useThemedStyles, type ThemeState } from '../context/ThemeContext';
 import { Button, smoothLayout } from './ui';
 import { CountdownRing } from './CountdownRing';
 
 type Phase = 'countdown' | 'waiting' | 'escalating' | 'result' | 'safe' | 'error';
 
 /** Copy shown after escalation, driven by how the SMS actually went. */
-const OUTCOME_COPY: Record<
-  SmsOutcome,
-  { title: string; color: string; help: string; ok: boolean }
-> = {
-  sent: {
-    title: 'Contacts alerted',
-    color: colors.safe,
-    help: 'Your emergency contacts have been texted your location. Stay where you are if you can.',
-    ok: true,
-  },
-  unknown: {
-    title: 'Alert opened',
-    color: colors.safe,
-    help: 'Your SMS app opened with the alert for your contacts. Make sure it was sent, and stay where you are if you can.',
-    ok: true,
-  },
-  cancelled: {
-    title: 'Alert not sent',
-    color: colors.warning,
-    help: 'You closed the message before it was sent. Reopen it or call your local emergency number.',
-    ok: false,
-  },
-  unavailable: {
-    title: "Couldn't send SMS",
-    color: colors.warning,
-    help: 'This device can’t send text messages. Call your local emergency number directly.',
-    ok: false,
-  },
-  'no-contacts': {
-    title: 'No contacts to alert',
-    color: colors.warning,
-    help: 'Add emergency contacts in the Contacts tab so Saviour can text them for you.',
-    ok: false,
-  },
-};
+function outcomeCopy(
+  c: Palette
+): Record<SmsOutcome, { title: string; color: string; help: string; ok: boolean }> {
+  return {
+    sent: {
+      title: 'Contacts alerted',
+      color: c.safe,
+      help: 'Your emergency contacts have been texted your location. Stay where you are if you can.',
+      ok: true,
+    },
+    unknown: {
+      title: 'Message ready — hit send',
+      color: c.safe,
+      help: 'Your SMS app is open with the alert already written and addressed. Tap send, then stay where you are if you can.',
+      ok: true,
+    },
+    cancelled: {
+      title: 'Alert not sent',
+      color: c.warning,
+      help: 'You closed the message before it was sent. Reopen it or call your local emergency number.',
+      ok: false,
+    },
+    unavailable: {
+      title: "Couldn't send SMS",
+      color: c.warning,
+      help: 'This device can’t send text messages. Call your local emergency number directly.',
+      ok: false,
+    },
+    'no-contacts': {
+      title: 'No contacts to alert',
+      color: c.warning,
+      help: 'Add emergency contacts in the Contacts tab so Saviour can text them for you.',
+      ok: false,
+    },
+  };
+}
 
 const ALARM_PATTERN = [0, 600, 400, 600, 400];
 
 /**
  * Full-screen "Are you OK?" overlay shown the moment a fall is detected.
  * Counts down from the incident's grace period. If the user does not tap
- * "I'M OK" in time, it escalates — the parent opens the device SMS composer to
- * alert the emergency contacts (there is no server).
+ * "I'M OK" in time, it escalates — the parent opens the device SMS composer,
+ * pre-filled and pre-addressed, to alert the emergency contacts.
  */
 export function EmergencyOverlay({
   incident,
@@ -68,13 +70,16 @@ export function EmergencyOverlay({
   onEscalate?: () => Promise<SmsOutcome>;
   /** Marks the incident safe and persists it. */
   onSafe?: () => Promise<void>;
-  /** When false, hitting 0 waits on a prompt instead of auto-sending. */
+  /** When false, hitting 0 waits on a prompt instead of opening the composer. */
   autoEscalate?: boolean;
   /** Loud looping vibration alarm during the countdown. */
   siren?: boolean;
   /** Preview the flow without creating real alerts (Settings → Test alarm). */
   test?: boolean;
 }) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+
   const [remaining, setRemaining] = useState(incident.countdownSeconds);
   const [phase, setPhaseRaw] = useState<Phase>('countdown');
   const [outcome, setOutcome] = useState<SmsOutcome>('sent');
@@ -90,12 +95,7 @@ export function EmergencyOverlay({
   // Spring the sheet up on mount instead of a bare fade.
   const enter = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.spring(enter, {
-      toValue: 1,
-      speed: 12,
-      bounciness: 7,
-      useNativeDriver: true,
-    }).start();
+    Animated.spring(enter, { toValue: 1, speed: 12, bounciness: 7, useNativeDriver: true }).start();
   }, [enter]);
 
   const stopAlarm = useCallback(() => Vibration.cancel(), []);
@@ -120,6 +120,8 @@ export function EmergencyOverlay({
     return () => clearTimeout(t);
   }, [remaining, phase]);
 
+  const COPY = outcomeCopy(colors);
+
   async function escalate() {
     if (escalatedRef.current) return;
     escalatedRef.current = true;
@@ -130,7 +132,7 @@ export function EmergencyOverlay({
       setOutcome(result);
       setPhase('result');
       Haptics.notificationAsync(
-        OUTCOME_COPY[result].ok
+        COPY[result].ok
           ? Haptics.NotificationFeedbackType.Success
           : Haptics.NotificationFeedbackType.Error
       ).catch(() => {});
@@ -160,7 +162,7 @@ export function EmergencyOverlay({
     });
   };
 
-  const copy = OUTCOME_COPY[outcome];
+  const copy = COPY[outcome];
   const kicker =
     incident.source === 'MANUAL_SOS' ? 'MANUAL SOS ACTIVATED' : 'POSSIBLE ACCIDENT DETECTED';
 
@@ -196,7 +198,7 @@ export function EmergencyOverlay({
               <Text style={styles.help}>
                 {phase === 'waiting'
                   ? 'The grace period is up. Alert your emergency contacts now, or confirm you are safe.'
-                  : `Your emergency contacts will be texted your location in ${remaining}s unless you respond.`}
+                  : `In ${remaining}s your SMS app opens with an alert ready to send to your contacts.`}
               </Text>
 
               {incident.impactMagnitude ? (
@@ -206,13 +208,7 @@ export function EmergencyOverlay({
               <View style={styles.actions}>
                 <Button title="I'M OK — I'm fine" icon="✅" variant="safe" onPress={markSafe} />
                 <Button title="Send help now" icon="🆘" variant="danger" onPress={escalate} />
-                <Button
-                  title="Call for help"
-                  icon="📞"
-                  variant="ghost"
-                  size="md"
-                  onPress={callForHelp}
-                />
+                <Button title="Call for help" icon="📞" variant="ghost" size="md" onPress={callForHelp} />
               </View>
             </>
           )}
@@ -220,7 +216,7 @@ export function EmergencyOverlay({
           {phase === 'escalating' && (
             <View style={{ alignItems: 'center', paddingVertical: spacing(3) }}>
               <Text style={styles.title}>Opening your messages…</Text>
-              <Text style={styles.help}>Hang tight — preparing the alert for your contacts.</Text>
+              <Text style={styles.help}>Hang tight — writing the alert for your contacts.</Text>
             </View>
           )}
 
@@ -262,54 +258,55 @@ export function EmergencyOverlay({
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: colors.overlay,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing(3),
-  },
-  sheet: {
-    width: '100%',
-    maxWidth: 420,
-    backgroundColor: colors.surface,
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: colors.danger,
-    padding: spacing(3),
-    alignItems: 'center',
-  },
-  kicker: { color: colors.dangerHi, fontWeight: '900', letterSpacing: 1.5, fontSize: 12 },
-  testTag: {
-    color: colors.warning,
-    fontWeight: '900',
-    fontSize: 11,
-    marginBottom: spacing(1),
-    letterSpacing: 0.5,
-  },
-  title: {
-    ...type.h1,
-    fontSize: 28,
-    marginTop: spacing(1),
-    marginBottom: spacing(2),
-    textAlign: 'center',
-  },
-  resultIcon: { fontSize: 40, marginBottom: spacing(1) },
-  help: {
-    color: colors.textMuted,
-    textAlign: 'center',
-    marginTop: spacing(2),
-    marginBottom: spacing(2.5),
-    lineHeight: 21,
-    fontSize: 14,
-  },
-  detail: {
-    color: colors.textFaint,
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    marginBottom: spacing(2),
-  },
-  actions: { alignSelf: 'stretch', width: '100%', gap: spacing(1.5) },
-});
+const makeStyles = ({ colors, type }: ThemeState) =>
+  StyleSheet.create({
+    backdrop: {
+      flex: 1,
+      backgroundColor: colors.overlay,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: spacing(3),
+    },
+    sheet: {
+      width: '100%',
+      maxWidth: 420,
+      backgroundColor: colors.surface,
+      borderRadius: radius.xl,
+      borderWidth: 1,
+      borderColor: colors.danger,
+      padding: spacing(3),
+      alignItems: 'center',
+    },
+    kicker: { color: colors.dangerHi, fontWeight: '900', letterSpacing: 1.5, fontSize: 12 },
+    testTag: {
+      color: colors.warning,
+      fontWeight: '900',
+      fontSize: 11,
+      marginBottom: spacing(1),
+      letterSpacing: 0.5,
+    },
+    title: {
+      ...type.h1,
+      fontSize: 28,
+      marginTop: spacing(1),
+      marginBottom: spacing(2),
+      textAlign: 'center',
+    },
+    resultIcon: { fontSize: 40, marginBottom: spacing(1) },
+    help: {
+      color: colors.textMuted,
+      textAlign: 'center',
+      marginTop: spacing(2),
+      marginBottom: spacing(2.5),
+      lineHeight: 21,
+      fontSize: 14,
+    },
+    detail: {
+      color: colors.textFaint,
+      fontSize: 12,
+      fontWeight: '700',
+      letterSpacing: 0.5,
+      marginBottom: spacing(2),
+    },
+    actions: { alignSelf: 'stretch', width: '100%', gap: spacing(1.5) },
+  });

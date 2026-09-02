@@ -14,6 +14,7 @@ const MAX_HISTORY = 100;
 
 export const DEFAULT_SETTINGS: Settings = {
   name: '',
+  themePreference: 'system',
   countdownSeconds: 30,
   sensitivity: 2.6,
   autoEscalateEnabled: true,

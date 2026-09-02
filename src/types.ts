@@ -1,3 +1,7 @@
+import type { ThemePreference } from './theme';
+
+export type { ThemePreference };
+
 export interface EmergencyContact {
   id: string;
   name: string;
@@ -10,6 +14,8 @@ export interface EmergencyContact {
 export interface Settings {
   /** Optional name used in the emergency message so contacts know who it is. */
   name: string;
+  /** Light, dark, or follow the OS. */
+  themePreference: ThemePreference;
   countdownSeconds: number;
   /** Impact threshold in g for fall detection (lower = more sensitive). */
   sensitivity: number;

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
-import { colors } from '../theme';
+import { useTheme, useThemedStyles, type ThemeState } from '../context/ThemeContext';
 
 /**
  * Animated "Are you OK?" countdown visual — SVG-free, uses only the RN
@@ -26,6 +26,9 @@ export function CountdownRing({
   running: boolean;
   size?: number;
 }) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+
   const elapsed = Math.max(0, total - remaining);
   const progress = total > 0 ? Math.min(1, elapsed / total) : 0;
   const urgent = remaining <= 5;
@@ -98,12 +101,7 @@ export function CountdownRing({
             { width: size, height: size, borderRadius: size / 2, borderColor: colors.surfaceHi },
           ]}
         />
-        <Animated.View
-          style={[
-            styles.sweepLayer,
-            { width: size, height: size, transform: [{ rotate }] },
-          ]}
-        >
+        <Animated.View style={[styles.sweepLayer, { width: size, height: size, transform: [{ rotate }] }]}>
           <View
             style={{
               width: marker,
@@ -125,28 +123,24 @@ export function CountdownRing({
       </View>
 
       <View style={[styles.barTrack, { width: size }]}>
-        <View
-          style={[
-            styles.barFill,
-            { width: `${(1 - progress) * 100}%`, backgroundColor: accent },
-          ]}
-        />
+        <View style={[styles.barFill, { width: `${(1 - progress) * 100}%`, backgroundColor: accent }]} />
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  sonar: { position: 'absolute', borderWidth: 2 },
-  track: { position: 'absolute', borderWidth: 6 },
-  sweepLayer: { position: 'absolute', alignItems: 'center' },
-  count: { fontSize: 72, fontWeight: '900', letterSpacing: -2 },
-  barTrack: {
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.surfaceHi,
-    marginTop: 18,
-    overflow: 'hidden',
-  },
-  barFill: { height: 4, borderRadius: 2 },
-});
+const makeStyles = ({ colors }: ThemeState) =>
+  StyleSheet.create({
+    sonar: { position: 'absolute', borderWidth: 2 },
+    track: { position: 'absolute', borderWidth: 6 },
+    sweepLayer: { position: 'absolute', alignItems: 'center' },
+    count: { fontSize: 72, fontWeight: '900', letterSpacing: -2 },
+    barTrack: {
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: colors.surfaceHi,
+      marginTop: 18,
+      overflow: 'hidden',
+    },
+    barFill: { height: 4, borderRadius: 2 },
+  });

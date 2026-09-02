@@ -12,7 +12,9 @@ import {
 } from 'react-native';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import * as Location from 'expo-location';
+import * as Haptics from 'expo-haptics';
 import { useSettings } from '../context/SettingsContext';
+import { useTheme, useThemedStyles, type ThemeState } from '../context/ThemeContext';
 import { useFallDetection } from '../hooks/useFallDetection';
 import { getCurrentFix } from '../utils/location';
 import { notifyLocal } from '../services/notifications';
@@ -22,7 +24,7 @@ import type { Incident, IncidentSource, SmsOutcome } from '../types';
 import { EmergencyOverlay } from '../components/EmergencyOverlay';
 import { Banner, Button, Card, MountFade } from '../components/ui';
 import { relativeTime } from '../utils/format';
-import { colors, radius, spacing, type } from '../theme';
+import { radius, spacing } from '../theme';
 
 const KEEP_AWAKE_TAG = 'saviour-monitor';
 
@@ -30,9 +32,11 @@ type Ready = { contacts: number; hasName: boolean; location: 'granted' | 'denied
 
 export function MonitorScreen() {
   const { settings } = useSettings();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+
   const [monitoring, setMonitoring] = useState(false);
   const [active, setActive] = useState<Incident | null>(null);
-  const [test, setTest] = useState<Incident | null>(null);
   const [busy, setBusy] = useState(false);
   const [backgrounded, setBackgrounded] = useState(false);
   const [ready, setReady] = useState<Ready>({ contacts: 0, hasName: false, location: 'unknown' });
@@ -76,7 +80,7 @@ export function MonitorScreen() {
   }, []);
 
   // Beacon animation while monitoring: two radar rings pulsing out of phase,
-  // plus a slow "breathing" scale on the core so an idle screen still feels live.
+  // plus a slow "breathing" core so an idle screen still feels live.
   useEffect(() => {
     if (!monitoring) {
       [pulse, pulse2, breathe].forEach((v) => {
@@ -98,8 +102,18 @@ export function MonitorScreen() {
     const ringB = ring(pulse2);
     const breath = Animated.loop(
       Animated.sequence([
-        Animated.timing(breathe, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        Animated.timing(breathe, { toValue: 0, duration: 1500, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(breathe, {
+          toValue: 1,
+          duration: 1500,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(breathe, {
+          toValue: 0,
+          duration: 1500,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
       ])
     );
     ringA.start();
@@ -201,18 +215,15 @@ export function MonitorScreen() {
       { text: 'Send SOS', style: 'destructive', onPress: () => openIncident('MANUAL_SOS') },
     ]);
 
-  const runTest = () =>
-    setTest({
-      id: genId(),
-      status: 'PENDING',
-      source: 'FALL_DETECTION',
-      impactMagnitude: 3.1,
-      countdownSeconds: settings.countdownSeconds,
-      detectedAt: new Date().toISOString(),
-    });
-
   const firstName = settings.name.trim().split(' ')[0];
-  const notReady = ready.contacts === 0 || !ready.hasName;
+
+  // Only surface setup steps that still need doing — a wall of green ticks is
+  // noise on a screen you look at every day.
+  const todo = [
+    !ready.hasName && 'Add your name in Settings',
+    ready.contacts === 0 && 'Add an emergency contact',
+    ready.location !== 'granted' && 'Allow location access',
+  ].filter(Boolean) as string[];
 
   const ringScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.9] });
   const ringOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.45, 0] });
@@ -227,79 +238,78 @@ export function MonitorScreen() {
       </MountFade>
 
       <MountFade delay={60}>
-      <Card elevated style={{ alignItems: 'center', paddingVertical: spacing(4) }}>
-        <View style={styles.beaconBox}>
-          {monitoring && (
-            <>
+        <Card elevated style={styles.hero}>
+          <View style={styles.beaconBox}>
+            {monitoring && (
+              <>
+                <Animated.View
+                  style={[
+                    styles.beaconPulse,
+                    { borderColor: colors.safe, opacity: ringOpacity, transform: [{ scale: ringScale }] },
+                  ]}
+                />
+                <Animated.View
+                  style={[
+                    styles.beaconPulse,
+                    { borderColor: colors.safe, opacity: ring2Opacity, transform: [{ scale: ring2Scale }] },
+                  ]}
+                />
+              </>
+            )}
+            <View style={[styles.beacon, { borderColor: monitoring ? colors.safe : colors.border }]}>
               <Animated.View
                 style={[
-                  styles.beaconPulse,
-                  { borderColor: colors.safe, opacity: ringOpacity, transform: [{ scale: ringScale }] },
+                  styles.beaconDot,
+                  {
+                    backgroundColor: monitoring ? colors.safe : colors.textFaint,
+                    transform: [{ scale: monitoring ? coreScale : 1 }],
+                  },
                 ]}
               />
-              <Animated.View
-                style={[
-                  styles.beaconPulse,
-                  { borderColor: colors.safe, opacity: ring2Opacity, transform: [{ scale: ring2Scale }] },
-                ]}
-              />
-            </>
-          )}
-          <View style={[styles.beacon, { borderColor: monitoring ? colors.safe : colors.border }]}>
-            <Animated.View
-              style={[
-                styles.beaconDot,
-                {
-                  backgroundColor: monitoring ? colors.safe : colors.textFaint,
-                  transform: [{ scale: monitoring ? coreScale : 1 }],
-                },
-              ]}
+            </View>
+          </View>
+
+          <Text style={styles.statusTitle}>{monitoring ? 'Protection active' : 'Protection off'}</Text>
+          <Text style={styles.statusHelp}>
+            {monitoring
+              ? 'Watching for a fall. Keep Saviour open in the foreground.'
+              : 'Turn on to start watching for accidents.'}
+          </Text>
+
+          <View style={styles.switchRow}>
+            <Text style={styles.switchLabel}>Monitoring</Text>
+            <Switch
+              value={monitoring}
+              onValueChange={(v) => {
+                Haptics.selectionAsync().catch(() => {});
+                setMonitoring(v);
+              }}
+              trackColor={{ true: colors.safe, false: colors.border }}
+              thumbColor="#fff"
             />
           </View>
-        </View>
-
-        <Text style={styles.statusTitle}>
-          {monitoring ? 'Protection active' : 'Protection off'}
-        </Text>
-        <Text style={styles.statusHelp}>
-          {monitoring
-            ? 'Saviour is watching for a fall. Keep the app open in the foreground.'
-            : 'Turn on to start monitoring for accidents.'}
-        </Text>
-
-        <View style={styles.switchRow}>
-          <Text style={styles.switchLabel}>Monitoring</Text>
-          <Switch
-            value={monitoring}
-            onValueChange={setMonitoring}
-            trackColor={{ true: colors.safe, false: colors.border }}
-            thumbColor="#fff"
-          />
-        </View>
-      </Card>
+        </Card>
       </MountFade>
 
       {monitoring && backgrounded && (
         <Banner
           tone="warning"
           title="Detection pauses in the background"
-          message="The OS stops the motion sensor when Saviour isn't on screen. Keep it open and awake."
+          message="The OS stops the motion sensor when Saviour isn't on screen."
         />
       )}
 
-      {notReady && (
-        <Banner
-          tone="warning"
-          title="Setup incomplete"
-          message={
-            ready.contacts === 0
-              ? 'Add at least one emergency contact so Saviour can alert someone.'
-              : 'Add your name in Settings so contacts know who needs help.'
-          }
-        />
+      {todo.length > 0 && (
+        <MountFade delay={100}>
+          <Banner
+            tone="warning"
+            title={todo.length === 1 ? 'One step left' : `${todo.length} steps left`}
+            message={todo.join(' · ')}
+          />
+        </MountFade>
       )}
 
-      <MountFade delay={120}>
+      <MountFade delay={140}>
         <Button
           title="Send SOS now"
           icon="🆘"
@@ -308,37 +318,14 @@ export function MonitorScreen() {
           loading={busy}
           style={{ marginTop: spacing(2) }}
         />
-      </MountFade>
-
-      <MountFade delay={180}>
-      <Card style={{ marginTop: spacing(2) }}>
-        <Text style={styles.cardTitle}>Readiness</Text>
-        <CheckRow ok={ready.hasName} label="Your name is set" hint="Shown in the alert text" />
-        <CheckRow
-          ok={ready.contacts > 0}
-          label={`${ready.contacts} emergency contact${ready.contacts === 1 ? '' : 's'}`}
-          hint="Texted your location on escalation"
-        />
-        <CheckRow
-          ok={ready.location === 'granted'}
-          label="Location permission"
-          hint={ready.location === 'denied' ? 'Denied — alerts won’t include a map link' : 'Used for the map link'}
-        />
-        <CheckRow
-          ok
-          label={`Auto-escalate ${settings.autoEscalateEnabled ? 'on' : 'off'}`}
-          hint={
-            settings.autoEscalateEnabled
-              ? 'Alerts open automatically at 0'
-              : 'You confirm the alert at 0'
-          }
-        />
-      </Card>
+        <Text style={styles.sosHint}>
+          Opens your SMS app with the alert written and addressed — just hit send.
+        </Text>
       </MountFade>
 
       {lastIncident && (
-        <MountFade delay={220}>
-          <Card style={{ marginTop: spacing(2) }}>
+        <MountFade delay={200}>
+          <Card style={{ marginTop: spacing(1) }}>
             <Text style={styles.cardTitle}>Last incident</Text>
             <Text style={styles.lastLine}>
               {lastIncident.source === 'MANUAL_SOS' ? 'Manual SOS' : 'Fall detected'} ·{' '}
@@ -347,29 +334,6 @@ export function MonitorScreen() {
           </Card>
         </MountFade>
       )}
-
-      <MountFade delay={260}>
-      <Card style={{ marginTop: spacing(2) }}>
-        <Text style={styles.cardTitle}>How it works</Text>
-        <Text style={styles.infoLine}>1. Turn on monitoring and keep Saviour open.</Text>
-        <Text style={styles.infoLine}>
-          2. A hard fall triggers a {settings.countdownSeconds}s “Are you OK?” prompt.
-        </Text>
-        <Text style={styles.infoLine}>
-          3. No response → your SMS app opens, pre-filled for your contacts.
-        </Text>
-      </Card>
-
-      <Button
-        title="Test the alarm"
-        icon="🔔"
-        variant="ghost"
-        size="md"
-        onPress={runTest}
-        style={{ marginTop: spacing(2) }}
-      />
-      <Text style={styles.testHint}>Previews the countdown. Nothing is sent.</Text>
-      </MountFade>
 
       {active && (
         <EmergencyOverlay
@@ -381,77 +345,52 @@ export function MonitorScreen() {
           onClose={closeActive}
         />
       )}
-
-      {test && (
-        <EmergencyOverlay
-          test
-          incident={test}
-          siren={settings.sirenEnabled}
-          onClose={() => setTest(null)}
-        />
-      )}
     </ScrollView>
   );
 }
 
-function CheckRow({ ok, label, hint }: { ok: boolean; label: string; hint?: string }) {
-  return (
-    <View style={styles.checkRow}>
-      <Text style={[styles.checkMark, { color: ok ? colors.safe : colors.warning }]}>
-        {ok ? '✓' : '!'}
-      </Text>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.checkLabel}>{label}</Text>
-        {hint ? <Text style={styles.checkHint}>{hint}</Text> : null}
-      </View>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: { padding: spacing(2), paddingBottom: spacing(6), gap: 0 },
-  hello: { ...type.h1, marginBottom: spacing(2) },
-  beaconBox: { alignItems: 'center', justifyContent: 'center', marginBottom: spacing(2) },
-  beaconPulse: { position: 'absolute', width: 96, height: 96, borderRadius: 48, borderWidth: 2 },
-  beacon: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    borderWidth: 3,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  beaconDot: { width: 40, height: 40, borderRadius: 20 },
-  statusTitle: { ...type.h2 },
-  statusHelp: {
-    color: colors.textMuted,
-    textAlign: 'center',
-    marginTop: 6,
-    marginBottom: spacing(2),
-    paddingHorizontal: spacing(2),
-    lineHeight: 20,
-  },
-  switchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing(1.5),
-    backgroundColor: colors.surfaceAlt,
-    paddingHorizontal: spacing(2),
-    paddingVertical: spacing(1),
-    borderRadius: radius.pill,
-  },
-  switchLabel: { color: colors.text, fontWeight: '700' },
-  cardTitle: { ...type.h3, marginBottom: spacing(1) },
-  infoLine: { color: colors.textMuted, lineHeight: 22 },
-  lastLine: { color: colors.textMuted, lineHeight: 20, fontWeight: '600' },
-  checkRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing(1.5),
-    paddingVertical: spacing(0.75),
-  },
-  checkMark: { fontSize: 15, fontWeight: '900', width: 16, textAlign: 'center', marginTop: 1 },
-  checkLabel: { color: colors.text, fontWeight: '600', fontSize: 14 },
-  checkHint: { color: colors.textFaint, fontSize: 12, marginTop: 1 },
-  testHint: { color: colors.textFaint, fontSize: 12, textAlign: 'center', marginTop: 6 },
-});
+const makeStyles = ({ colors, type }: ThemeState) =>
+  StyleSheet.create({
+    container: { padding: spacing(2), paddingBottom: spacing(6), gap: spacing(1.5) },
+    hello: { ...type.h1 },
+    hero: { alignItems: 'center', paddingVertical: spacing(4) },
+    beaconBox: { alignItems: 'center', justifyContent: 'center', marginBottom: spacing(2) },
+    beaconPulse: { position: 'absolute', width: 96, height: 96, borderRadius: 48, borderWidth: 2 },
+    beacon: {
+      width: 96,
+      height: 96,
+      borderRadius: 48,
+      borderWidth: 3,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    beaconDot: { width: 40, height: 40, borderRadius: 20 },
+    statusTitle: { ...type.h2 },
+    statusHelp: {
+      color: colors.textMuted,
+      textAlign: 'center',
+      marginTop: 6,
+      marginBottom: spacing(2),
+      paddingHorizontal: spacing(2),
+      lineHeight: 20,
+    },
+    switchRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing(1.5),
+      backgroundColor: colors.surfaceAlt,
+      paddingHorizontal: spacing(2),
+      paddingVertical: spacing(1),
+      borderRadius: radius.pill,
+    },
+    switchLabel: { color: colors.text, fontWeight: '700' },
+    sosHint: {
+      color: colors.textFaint,
+      fontSize: 12,
+      textAlign: 'center',
+      marginTop: 8,
+      lineHeight: 17,
+    },
+    cardTitle: { ...type.h3, marginBottom: spacing(0.5) },
+    lastLine: { color: colors.textMuted, lineHeight: 20, fontWeight: '600' },
+  });
