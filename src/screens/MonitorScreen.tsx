@@ -173,11 +173,19 @@ export function MonitorScreen() {
     [active, settings.countdownSeconds]
   );
 
-  useFallDetection({
+  const { available: sensorAvailable } = useFallDetection({
     enabled: monitoring && !active,
     sensitivity: settings.sensitivity,
     onFall: (magnitude) => openIncident('FALL_DETECTION', magnitude),
   });
+
+  // No accelerometer (web, or a device without one) means automatic detection
+  // cannot work. Manual SOS still can, so only the monitoring half is stood down.
+  const noSensor = sensorAvailable === false;
+
+  useEffect(() => {
+    if (noSensor && monitoring) setMonitoring(false);
+  }, [noSensor, monitoring]);
 
   // Escalation: grab the freshest location, text every contact, save history.
   const handleEscalate = useCallback(async (): Promise<SmsOutcome> => {
@@ -294,17 +302,22 @@ export function MonitorScreen() {
             </View>
           </View>
 
-          <Text style={styles.statusTitle}>{monitoring ? 'Protection active' : 'Protection off'}</Text>
+          <Text style={styles.statusTitle}>
+            {noSensor ? 'Detection unavailable' : monitoring ? 'Protection active' : 'Protection off'}
+          </Text>
           <Text style={styles.statusHelp}>
-            {monitoring
-              ? 'Watching for a fall. Keep Saviour open in the foreground.'
-              : 'Turn on to start watching for accidents.'}
+            {noSensor
+              ? 'This device has no usable motion sensor. Send SOS still works.'
+              : monitoring
+                ? 'Watching for a fall. Keep Saviour open in the foreground.'
+                : 'Turn on to start watching for accidents.'}
           </Text>
 
-          <View style={styles.switchRow}>
+          <View style={[styles.switchRow, noSensor && styles.switchRowDisabled]}>
             <Text style={styles.switchLabel}>Monitoring</Text>
             <Switch
-              value={monitoring}
+              value={monitoring && !noSensor}
+              disabled={noSensor}
               onValueChange={(v) => {
                 Haptics.selectionAsync().catch(() => {});
                 setMonitoring(v);
@@ -316,7 +329,18 @@ export function MonitorScreen() {
         </Card>
       </MountFade>
 
-      {monitoring && backgrounded && (
+      {noSensor && (
+        <MountFade delay={80}>
+          <Banner
+            tone="warning"
+            icon="📴"
+            title="Fall detection needs a phone"
+            message="No accelerometer is available here — on the web there is no motion sensor to read. Open Saviour on your phone for automatic detection. Manual SOS works on any device."
+          />
+        </MountFade>
+      )}
+
+      {monitoring && backgrounded && !noSensor && (
         <Banner
           tone="warning"
           title="Detection pauses in the background"
@@ -411,6 +435,7 @@ const makeStyles = ({ colors, type }: ThemeState) =>
       paddingVertical: spacing(1),
       borderRadius: radius.pill,
     },
+    switchRowDisabled: { opacity: 0.5 },
     switchLabel: { color: colors.text, fontWeight: '700' },
     sosHint: {
       color: colors.textFaint,

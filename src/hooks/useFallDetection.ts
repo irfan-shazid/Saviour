@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Accelerometer } from 'expo-sensors';
 
 interface Options {
@@ -7,6 +7,11 @@ interface Options {
   sensitivity: number;
   /** Called once when a probable fall is detected, with the peak g-force. */
   onFall: (magnitude: number) => void;
+}
+
+interface Result {
+  /** null while probing, then whether this device can detect falls at all. */
+  available: boolean | null;
 }
 
 const SAMPLE_INTERVAL_MS = 80;
@@ -20,38 +25,82 @@ const COOLDOWN_MS = 8000; // ignore further detections briefly after a hit
  *   2. impact     — a sharp spike above `sensitivity` g shortly after
  * A very hard impact (> sensitivity + 1.5 g) also triggers on its own, so a
  * phone knocked out of a hand without a clean free-fall is still caught.
+ *
+ * Reports `available: false` rather than throwing where there is no usable
+ * accelerometer — notably on web, whose expo-sensors shim implements only
+ * startObserving/stopObserving and has no addListener at all. This is a safety
+ * app: an unsupported platform must degrade to an honest "not available",
+ * never to a crashed screen.
  */
-export function useFallDetection({ enabled, sensitivity, onFall }: Options) {
+export function useFallDetection({ enabled, sensitivity, onFall }: Options): Result {
+  const [available, setAvailable] = useState<boolean | null>(null);
   const freefallAt = useRef<number>(0);
   const cooldownUntil = useRef<number>(0);
   const onFallRef = useRef(onFall);
   onFallRef.current = onFall;
 
+  // Probe once. `isAvailableAsync` can still be optimistic (desktop browsers
+  // define DeviceOrientationEvent without a real sensor), so the API surface
+  // is checked too.
   useEffect(() => {
-    if (!enabled) return;
+    let cancelled = false;
+    const usable =
+      typeof Accelerometer?.addListener === 'function' &&
+      typeof Accelerometer?.setUpdateInterval === 'function';
 
-    Accelerometer.setUpdateInterval(SAMPLE_INTERVAL_MS);
-    const sub = Accelerometer.addListener(({ x, y, z }) => {
-      const now = Date.now();
-      if (now < cooldownUntil.current) return;
+    if (!usable) {
+      setAvailable(false);
+      return;
+    }
 
-      const magnitude = Math.sqrt(x * x + y * y + z * z);
+    Accelerometer.isAvailableAsync()
+      .then((ok) => {
+        if (!cancelled) setAvailable(ok);
+      })
+      .catch(() => {
+        if (!cancelled) setAvailable(false);
+      });
 
-      if (magnitude < FREEFALL_THRESHOLD) {
-        freefallAt.current = now;
-        return;
-      }
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-      const recentFreefall = now - freefallAt.current < FREEFALL_WINDOW_MS;
-      const hardImpact = magnitude > sensitivity + 1.5;
+  useEffect(() => {
+    if (!enabled || available !== true) return;
 
-      if (magnitude > sensitivity && (recentFreefall || hardImpact)) {
-        cooldownUntil.current = now + COOLDOWN_MS;
-        freefallAt.current = 0;
-        onFallRef.current(Number(magnitude.toFixed(2)));
-      }
-    });
+    let sub: { remove: () => void } | undefined;
+    try {
+      Accelerometer.setUpdateInterval(SAMPLE_INTERVAL_MS);
+      sub = Accelerometer.addListener(({ x, y, z }) => {
+        const now = Date.now();
+        if (now < cooldownUntil.current) return;
 
-    return () => sub.remove();
-  }, [enabled, sensitivity]);
+        const magnitude = Math.sqrt(x * x + y * y + z * z);
+
+        if (magnitude < FREEFALL_THRESHOLD) {
+          freefallAt.current = now;
+          return;
+        }
+
+        const recentFreefall = now - freefallAt.current < FREEFALL_WINDOW_MS;
+        const hardImpact = magnitude > sensitivity + 1.5;
+
+        if (magnitude > sensitivity && (recentFreefall || hardImpact)) {
+          cooldownUntil.current = now + COOLDOWN_MS;
+          freefallAt.current = 0;
+          onFallRef.current(Number(magnitude.toFixed(2)));
+        }
+      });
+    } catch {
+      // The probe said yes but subscribing failed anyway — downgrade rather
+      // than take the Monitor screen down with us.
+      setAvailable(false);
+      return;
+    }
+
+    return () => sub?.remove();
+  }, [enabled, sensitivity, available]);
+
+  return { available };
 }
