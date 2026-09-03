@@ -3,7 +3,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } fr
 import { AppBackground } from '../components/AppBackground';
 import { Banner, Button, Field, GlassView, smoothLayout } from '../components/ui';
 import { useTheme, useThemedStyles, type ThemeState } from '../context/ThemeContext';
-import { authClient, authErrorMessage } from '../services/auth';
+import { authClient, authErrorMessage, oauthCallbackURL } from '../services/auth';
 import { reconcileAfterSignIn } from '../services/sync';
 import { spacing } from '../theme';
 
@@ -78,7 +78,10 @@ export function SignInScreen() {
     setBusy('google');
     setError(null);
     try {
-      const res = await authClient.signIn.social({ provider: 'google', callbackURL: 'saviour://' });
+      const res = await authClient.signIn.social({
+        provider: 'google',
+        callbackURL: oauthCallbackURL(),
+      });
       if (res.error) {
         setError(authErrorMessage(res.error, 'Google sign-in failed.'));
       } else {

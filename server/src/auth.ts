@@ -1,7 +1,7 @@
 import { betterAuth } from 'better-auth';
 import { expo } from '@better-auth/expo';
 import { pool } from './db.js';
-import { env, googleEnabled } from './env.js';
+import { env, googleEnabled, trustedOrigins } from './env.js';
 
 if (!googleEnabled) {
   console.warn(
@@ -52,9 +52,9 @@ export const authOptions = {
     },
   },
 
-  // OAuth returns into the app through its custom scheme; Expo Go instead
-  // serves everything under exp://.
-  trustedOrigins: [`${env.APP_SCHEME}://`, 'exp://', 'exp://*'],
+  // Built in env.ts: the app scheme, Expo Go, this server, plus localhost
+  // wildcards in development for the Expo web dev server.
+  trustedOrigins,
 
   plugins: [expo()],
 } satisfies Parameters<typeof betterAuth>[0];

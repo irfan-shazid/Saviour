@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { createAuthClient } from 'better-auth/react';
 import { expoClient } from '@better-auth/expo/client';
@@ -24,6 +25,20 @@ export const authClient = createAuthClient({
 });
 
 export const { useSession, signIn, signUp, signOut } = authClient;
+
+/**
+ * Where an OAuth round-trip should land the user back.
+ *
+ * On native this is the app's registered scheme. In a browser that scheme
+ * resolves to nothing, so the page's own origin is used instead — otherwise
+ * Google returns to a URL the browser cannot open.
+ */
+export function oauthCallbackURL(): string {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    return window.location.origin;
+  }
+  return 'saviour://';
+}
 
 /** Turn Better Auth's error shapes into something worth showing a user. */
 export function authErrorMessage(err: unknown, fallback: string): string {

@@ -36,6 +36,42 @@ export const env = {
   // --- Google OAuth -----------------------------------------------------
   GOOGLE_CLIENT_ID: optional('GOOGLE_CLIENT_ID'),
   GOOGLE_CLIENT_SECRET: optional('GOOGLE_CLIENT_SECRET'),
+
+  /** Extra allowed origins, comma-separated. See `trustedOrigins` below. */
+  TRUSTED_ORIGINS: optional('TRUSTED_ORIGINS'),
+
+  NODE_ENV: optional('NODE_ENV', 'development'),
 } as const;
 
 export const googleEnabled = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+export const isProduction = env.NODE_ENV === 'production';
+
+/**
+ * Origins Better Auth will accept a request from.
+ *
+ * Matching is exact for http(s) patterns unless the pattern contains `*`, in
+ * which case it is glob-matched against the origin. So the Expo dev server —
+ * which lands on an arbitrary localhost port — needs a wildcard, and that
+ * wildcard is confined to development.
+ */
+export const trustedOrigins: string[] = (() => {
+  const origins = [
+    `${env.APP_SCHEME}://`, // the app's own scheme, for OAuth returns
+    'exp://', // Expo Go
+    'exp://*',
+    env.BETTER_AUTH_URL,
+  ];
+
+  if (!isProduction) {
+    // Expo web picks its own port (8081, 19006, …) and Metro may shift it.
+    origins.push('http://localhost:*', 'http://127.0.0.1:*');
+  }
+
+  origins.push(
+    ...env.TRUSTED_ORIGINS.split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+  );
+
+  return [...new Set(origins)];
+})();
