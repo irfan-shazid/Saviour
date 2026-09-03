@@ -12,8 +12,26 @@ import { env } from './env.js';
  * Use Neon's **pooled** connection string (the host with `-pooler` in it) —
  * a long-lived server should not hold a direct compute connection open.
  */
+/**
+ * TLS is configured by the explicit `ssl` option below, so the libpq-style
+ * parameters Neon puts in its connection string are redundant here — and
+ * actively noisy: pg currently maps `sslmode=require` onto `verify-full` and
+ * warns that the meaning will change in pg v9. Dropping them leaves one
+ * source of truth for TLS and keeps behaviour stable across that upgrade.
+ */
+function stripLibpqTlsParams(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.searchParams.delete('sslmode');
+    parsed.searchParams.delete('channel_binding');
+    return parsed.toString();
+  } catch {
+    return url; // Not URL-shaped; hand it to pg untouched and let it complain.
+  }
+}
+
 export const pool = new pg.Pool({
-  connectionString: env.DATABASE_URL,
+  connectionString: stripLibpqTlsParams(env.DATABASE_URL),
   ssl: { rejectUnauthorized: false },
   max: 10,
   idleTimeoutMillis: 30_000,
