@@ -23,9 +23,9 @@ async function requireUser(req: AuthedRequest, res: Response, next: NextFunction
     if (!session?.user?.id) {
       return res.status(401).json({ error: 'Not signed in.' });
     }
-    if (!session.user.emailVerified) {
-      return res.status(403).json({ error: 'Email not verified.' });
-    }
+    // No emailVerified gate: verification is switched off, so that flag is
+    // false for every password account and gating on it would lock everyone
+    // out of their own data.
     req.userId = session.user.id;
     next();
   } catch {

@@ -2,7 +2,6 @@ import { betterAuth } from 'better-auth';
 import { expo } from '@better-auth/expo';
 import { pool } from './db.js';
 import { env, googleEnabled } from './env.js';
-import { sendPasswordResetEmail, sendVerificationEmail } from './email.js';
 
 if (!googleEnabled) {
   console.warn(
@@ -15,9 +14,11 @@ if (!googleEnabled) {
  * Kept separate from the built instance because `getMigrations()` takes the
  * options object, not the instance.
  *
- * Verification is **link-based**: Better Auth mails a URL, the user taps it,
- * and the address is confirmed. There is deliberately no `emailOTP` plugin —
- * no codes to type in anywhere.
+ * There is **no email verification of any kind** — no link, no OTP code, no
+ * outbound mail at all. Sign-up creates the account and signs the user
+ * straight in. Better Auth only mails anything when a `sendVerificationEmail`
+ * / `sendResetPassword` handler is supplied, and deliberately none is, so the
+ * server needs no SMTP configuration.
  */
 export const authOptions = {
   appName: 'Saviour',
@@ -28,24 +29,9 @@ export const authOptions = {
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 8,
-    /** Sign-in is refused until the address is confirmed. */
-    requireEmailVerification: true,
-    /** Nothing to auto-sign-in to yet — the user must verify first. */
-    autoSignIn: false,
-    sendResetPassword: async ({ user, url }) => {
-      await sendPasswordResetEmail(user.email, url);
-    },
-  },
-
-  emailVerification: {
-    /** The mail goes out as part of sign-up, unprompted. */
-    sendOnSignUp: true,
-    /** Tapping the link also signs them in, so there's no second step. */
-    autoSignInAfterVerification: true,
-    expiresIn: 60 * 60, // one hour
-    sendVerificationEmail: async ({ user, url }) => {
-      await sendVerificationEmail(user.email, url, user.name);
-    },
+    requireEmailVerification: false,
+    /** Straight into a session — there is nothing to confirm first. */
+    autoSignIn: true,
   },
 
   socialProviders: googleEnabled
@@ -57,7 +43,8 @@ export const authOptions = {
       }
     : {},
 
-  // Google already proves the address, so those accounts skip verification.
+  // Signing in with Google on an address that already has a password account
+  // attaches to it rather than creating a second user.
   account: {
     accountLinking: {
       enabled: true,
@@ -65,8 +52,8 @@ export const authOptions = {
     },
   },
 
-  // OAuth and verification links come back into the app through its custom
-  // scheme; Expo Go instead serves everything under exp://.
+  // OAuth returns into the app through its custom scheme; Expo Go instead
+  // serves everything under exp://.
   trustedOrigins: [`${env.APP_SCHEME}://`, 'exp://', 'exp://*'],
 
   plugins: [expo()],

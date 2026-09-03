@@ -36,16 +36,6 @@ export const env = {
   // --- Google OAuth -----------------------------------------------------
   GOOGLE_CLIENT_ID: optional('GOOGLE_CLIENT_ID'),
   GOOGLE_CLIENT_SECRET: optional('GOOGLE_CLIENT_SECRET'),
-
-  // --- Email (verification links) ---------------------------------------
-  SMTP_HOST: optional('SMTP_HOST'),
-  SMTP_PORT: Number(optional('SMTP_PORT', '587')),
-  SMTP_USER: optional('SMTP_USER'),
-  SMTP_PASS: optional('SMTP_PASS'),
-  /** true for port 465 (implicit TLS), false for 587 (STARTTLS). */
-  SMTP_SECURE: optional('SMTP_SECURE', 'false') === 'true',
-  EMAIL_FROM: optional('EMAIL_FROM', 'Saviour <no-reply@saviour.app>'),
 } as const;
 
 export const googleEnabled = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
-export const emailEnabled = Boolean(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS);

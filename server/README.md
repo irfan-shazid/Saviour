@@ -4,25 +4,22 @@ Auth and data backend for the Saviour app.
 
 - **[Better Auth](https://better-auth.com)** — Google sign-in and email/password
 - **[Neon](https://neon.tech)** Postgres — auth tables *and* app data (contacts, incidents, settings)
-- **Link-based email verification** — no OTP codes anywhere
+- **No email verification** — no links, no OTP codes, no SMTP
 - Express transport, self-migrating on boot
 
 Accounts are optional in the app. Saviour's fall detection, SOS and contacts are
 on-device, so it runs fine with no server at all.
 
-## Email verification
+## No verification step
 
-Sign-up mails a **link**. Tapping it confirms the address and signs the user in
-(`autoSignInAfterVerification`), so there is no code to type. There is
-deliberately no `emailOTP` plugin.
+Sign-up creates the account and signs the user straight in (`autoSignIn`), and
+sign-in never checks `emailVerified`. Better Auth only sends mail when a
+`sendVerificationEmail` handler is supplied, and none is — so the server needs
+no SMTP configuration and nothing is ever emailed.
 
-Sign-in is refused until the address is verified. Google accounts skip
-verification entirely — Google has already proven the address.
-
-**This means SMTP is required for email/password sign-up.** Without it the
-verification link cannot be delivered and nobody can finish signing up. With
-SMTP unset the link is printed to the server console instead, which is enough
-for local development.
+The trade-off worth knowing: **email addresses are unproven.** Anyone can sign
+up as anyone, and password reset is unavailable, since that would also need
+outbound mail. Google accounts are the exception — Google has verified those.
 
 ## Setup
 

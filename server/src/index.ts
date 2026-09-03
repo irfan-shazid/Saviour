@@ -4,8 +4,7 @@ import { toNodeHandler } from 'better-auth/node';
 import { getMigrations } from 'better-auth/db/migration';
 import { auth, authOptions } from './auth.js';
 import { assertConnection, migrateAppTables } from './db.js';
-import { verifyEmailTransport } from './email.js';
-import { env, emailEnabled, googleEnabled } from './env.js';
+import { env, googleEnabled } from './env.js';
 import { dataRouter } from './routes/data.js';
 
 const app = express();
@@ -22,7 +21,6 @@ if (toBeCreated.length || toBeAdded.length) {
   );
 }
 await migrateAppTables();
-await verifyEmailTransport();
 
 // The app calls this from a phone on the LAN and from Expo Go's exp:// origin.
 app.use(cors({ origin: true, credentials: true }));
@@ -40,14 +38,11 @@ app.get('/health', (_req, res) => {
     ok: true,
     service: 'saviour-auth',
     google: googleEnabled,
-    email: emailEnabled,
+    emailVerification: false,
   });
 });
 
 app.listen(env.PORT, '0.0.0.0', () => {
   console.log(`[server] listening on http://0.0.0.0:${env.PORT}`);
   console.log(`[server] public URL: ${env.BETTER_AUTH_URL}`);
-  if (!emailEnabled) {
-    console.warn('[server] email verification is REQUIRED but SMTP is unset — nobody can sign in.');
-  }
 });

@@ -8,8 +8,7 @@
 import { getMigrations } from 'better-auth/db/migration';
 import { authOptions } from './auth.js';
 import { assertConnection, migrateAppTables, pool } from './db.js';
-import { verifyEmailTransport } from './email.js';
-import { emailEnabled, env, googleEnabled } from './env.js';
+import { env, googleEnabled } from './env.js';
 
 const EXPECTED = [
   'user',
@@ -55,23 +54,16 @@ async function main() {
   }
 
   console.log('\n4. Features');
-  console.log(`   ${tick(googleEnabled)} Google sign-in${googleEnabled ? '' : '  (GOOGLE_CLIENT_ID / _SECRET unset)'}`);
-  console.log(`   ${tick(emailEnabled)} SMTP for verification links${emailEnabled ? '' : '  (SMTP_HOST / _USER / _PASS unset)'}`);
-  if (emailEnabled) await verifyEmailTransport();
+  console.log(
+    `   ${tick(googleEnabled)} Google sign-in${googleEnabled ? '' : '  (GOOGLE_CLIENT_ID / _SECRET unset)'}`
+  );
+  console.log('   • email verification: OFF (no SMTP needed, no codes, no links)');
 
   console.log('\n5. Reachability');
   console.log(`   public URL: ${env.BETTER_AUTH_URL}`);
   console.log(`   Google callback must be registered as:`);
   console.log(`     ${env.BETTER_AUTH_URL}/api/auth/callback/google`);
   console.log(`   The app's EXPO_PUBLIC_AUTH_URL must equal ${env.BETTER_AUTH_URL}`);
-
-  if (!emailEnabled) {
-    console.warn(
-      `\n${tick(false)} Email verification is REQUIRED for email/password sign-up, but SMTP is` +
-        `\n  unset. Sign-ups will not be completable — the link is printed to this` +
-        `\n  console instead. Google sign-in is unaffected.`
-    );
-  }
 
   console.log(`\n${allPresent ? 'All expected tables present.' : 'Some tables are MISSING.'}\n`);
   await pool.end();
