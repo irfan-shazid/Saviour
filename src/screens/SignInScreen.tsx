@@ -3,21 +3,21 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } fr
 import { AppBackground } from '../components/AppBackground';
 import { Banner, Button, Field, GlassView, smoothLayout } from '../components/ui';
 import { useTheme, useThemedStyles, type ThemeState } from '../context/ThemeContext';
-import { authClient, authConfigured, authErrorMessage } from '../services/auth';
+import { authClient, authErrorMessage } from '../services/auth';
 import { reconcileAfterSignIn } from '../services/sync';
 import { spacing } from '../theme';
 
 type Mode = 'signIn' | 'signUp';
 
 /**
- * Optional account screen. Saviour works entirely on-device, so this never
- * blocks the safety features — "Continue without an account" is always
- * available, and is the only path when no auth server is configured.
+ * Sign-in gate. An account is required, so there is no skip path.
  *
- * There is no verification step: sign-up creates the account and signs the
- * user in, so both paths land in the same place.
+ * There is no verification step either: sign-up creates the account and signs
+ * the user straight in, so both branches land in the same place. Neither
+ * branch navigates — flipping the session is enough, and AuthGate swaps the
+ * app in on its next render.
  */
-export function SignInScreen({ onDone }: { onDone: () => void }) {
+export function SignInScreen() {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
 
@@ -66,7 +66,6 @@ export function SignInScreen({ onDone }: { onDone: () => void }) {
         );
       } else {
         await reconcileAfterSignIn();
-        onDone();
       }
     } catch (e) {
       setError(authErrorMessage(e, 'Could not reach the server. Check your connection.'));
@@ -83,8 +82,9 @@ export function SignInScreen({ onDone }: { onDone: () => void }) {
       if (res.error) {
         setError(authErrorMessage(res.error, 'Google sign-in failed.'));
       } else {
+        // No navigation call needed: the session flips and AuthGate swaps in
+        // the app on its next render.
         await reconcileAfterSignIn();
-        onDone();
       }
     } catch (e) {
       setError(authErrorMessage(e, 'Google sign-in failed.'));
@@ -104,103 +104,83 @@ export function SignInScreen({ onDone }: { onDone: () => void }) {
           <Text style={styles.mark}>🛟</Text>
           <Text style={styles.title}>Saviour</Text>
           <Text style={styles.tagline}>
-            Fall detection and one-tap SOS. Everything works offline — an account just syncs who you
-            are across devices.
+            Fall detection and one-tap SOS. Sign in to keep your contacts and history synced and
+            safe.
           </Text>
 
           <GlassView style={styles.panel}>
             <View style={styles.panelInner}>
-              {!authConfigured ? (
-                <Banner
-                  tone="info"
-                  icon="ℹ️"
-                  title="No account server configured"
-                  message="Set EXPO_PUBLIC_AUTH_URL in .env to enable sign-in. Saviour works fully without it."
-                />
-              ) : (
-                <>
-                  <Text style={styles.panelTitle}>
-                    {mode === 'signIn' ? 'Welcome back' : 'Create your account'}
-                  </Text>
+              <Text style={styles.panelTitle}>
+                {mode === 'signIn' ? 'Welcome back' : 'Create your account'}
+              </Text>
 
-                  {error && (
-                    <View style={{ marginBottom: spacing(2) }}>
-                      <Banner tone="danger" title="Couldn’t continue" message={error} />
-                    </View>
-                  )}
-
-                  {mode === 'signUp' && (
-                    <Field
-                      label="Name"
-                      value={name}
-                      onChangeText={setName}
-                      placeholder="Jane Doe"
-                      autoCapitalize="words"
-                      textContentType="name"
-                    />
-                  )}
-
-                  <Field
-                    label="Email"
-                    value={email}
-                    onChangeText={setEmail}
-                    placeholder="you@example.com"
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    textContentType="emailAddress"
-                  />
-                  <Field
-                    label="Password"
-                    value={password}
-                    onChangeText={setPassword}
-                    placeholder={mode === 'signUp' ? 'At least 8 characters' : '••••••••'}
-                    secureTextEntry
-                    autoCapitalize="none"
-                    textContentType={mode === 'signUp' ? 'newPassword' : 'password'}
-                  />
-
-                  <Button
-                    title={mode === 'signIn' ? 'Sign in' : 'Create account'}
-                    onPress={submitEmail}
-                    loading={busy === 'email'}
-                    disabled={busy !== null}
-                  />
-
-                  <View style={styles.dividerRow}>
-                    <View style={styles.rule} />
-                    <Text style={styles.dividerText}>or</Text>
-                    <View style={styles.rule} />
-                  </View>
-
-                  <Button
-                    title="Continue with Google"
-                    icon="🇬"
-                    variant="subtle"
-                    onPress={signInWithGoogle}
-                    loading={busy === 'google'}
-                    disabled={busy !== null}
-                  />
-
-                  <Text style={styles.swap} onPress={swap}>
-                    {mode === 'signIn'
-                      ? 'No account? Create one'
-                      : 'Already have an account? Sign in'}
-                  </Text>
-                </>
+              {error && (
+                <View style={{ marginBottom: spacing(2) }}>
+                  <Banner tone="danger" title="Couldn’t continue" message={error} />
+                </View>
               )}
+
+              {mode === 'signUp' && (
+                <Field
+                  label="Name"
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="Jane Doe"
+                  autoCapitalize="words"
+                  textContentType="name"
+                />
+              )}
+
+              <Field
+                label="Email"
+                value={email}
+                onChangeText={setEmail}
+                placeholder="you@example.com"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="emailAddress"
+              />
+              <Field
+                label="Password"
+                value={password}
+                onChangeText={setPassword}
+                placeholder={mode === 'signUp' ? 'At least 8 characters' : '••••••••'}
+                secureTextEntry
+                autoCapitalize="none"
+                textContentType={mode === 'signUp' ? 'newPassword' : 'password'}
+              />
+
+              <Button
+                title={mode === 'signIn' ? 'Sign in' : 'Create account'}
+                onPress={submitEmail}
+                loading={busy === 'email'}
+                disabled={busy !== null}
+              />
+
+              <View style={styles.dividerRow}>
+                <View style={styles.rule} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.rule} />
+              </View>
+
+              <Button
+                title="Continue with Google"
+                icon="🇬"
+                variant="subtle"
+                onPress={signInWithGoogle}
+                loading={busy === 'google'}
+                disabled={busy !== null}
+              />
+
+              <Text style={styles.swap} onPress={swap}>
+                {mode === 'signIn' ? 'No account? Create one' : 'Already have an account? Sign in'}
+              </Text>
             </View>
           </GlassView>
 
-          <Button
-            title="Continue without an account"
-            variant="ghost"
-            size="md"
-            onPress={onDone}
-            style={{ marginTop: spacing(2.5) }}
-          />
           <Text style={styles.footnote}>
-            Contacts, history and settings are stored on this device either way.
+            Your contacts, history and settings stay on this device and sync to your account.
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>

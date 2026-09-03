@@ -1,14 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { EmergencyContact, Incident, Settings } from './types';
 
-// Everything lives on-device now — there is no server. These three keys hold
-// the entire app state: your settings, your emergency contacts, and a history
-// of incidents.
+// Local-first storage: the phone is the source of truth for everything the
+// safety features need, so Saviour keeps working with no signal. These three
+// keys hold the whole app state — settings, emergency contacts and incident
+// history — and services/sync.ts mirrors them to the server in the background.
 const KEYS = {
   settings: 'saviour.settings',
   contacts: 'saviour.contacts',
   incidents: 'saviour.incidents',
-  authPromptDismissed: 'saviour.authPromptDismissed',
 } as const;
 
 const MAX_HISTORY = 100;
@@ -51,21 +51,6 @@ export async function loadSettings(): Promise<Settings> {
 
 export async function saveSettings(settings: Settings): Promise<void> {
   await writeJSON(KEYS.settings, settings);
-}
-
-// ---- Auth gate -----------------------------------------------------------
-
-/**
- * Whether the user has chosen to carry on without an account. Accounts are
- * optional here, so this is remembered and the prompt never nags again.
- */
-export async function loadAuthPromptDismissed(): Promise<boolean> {
-  return (await AsyncStorage.getItem(KEYS.authPromptDismissed)) === '1';
-}
-
-export async function setAuthPromptDismissed(dismissed: boolean): Promise<void> {
-  if (dismissed) await AsyncStorage.setItem(KEYS.authPromptDismissed, '1');
-  else await AsyncStorage.removeItem(KEYS.authPromptDismissed);
 }
 
 // ---- Contacts ------------------------------------------------------------

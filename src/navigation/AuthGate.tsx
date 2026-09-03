@@ -1,46 +1,60 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { AppBackground } from '../components/AppBackground';
+import { Banner, GlassView } from '../components/ui';
 import { useTheme, useThemedStyles, type ThemeState } from '../context/ThemeContext';
 import { RootNavigator } from './RootNavigator';
 import { SignInScreen } from '../screens/SignInScreen';
 import { authConfigured, useSession } from '../services/auth';
-import { loadAuthPromptDismissed, setAuthPromptDismissed } from '../storage';
 import { spacing } from '../theme';
 
 /**
- * Decides whether to show the account screen before the app.
+ * Signing in is required — the app is unreachable without a session.
  *
- * Accounts are deliberately optional: Saviour's safety features are entirely
- * on-device, so a missing server, a dead network or a user who simply doesn't
- * want an account must never be able to lock someone out of the SOS button.
+ * Note for offline use: the Expo client caches the session in SecureStore, so
+ * a user who has signed in once still gets straight through with no network.
+ * It is only the *first* sign-in on a device that needs connectivity.
  */
 export function AuthGate() {
-  const [dismissed, setDismissed] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    loadAuthPromptDismissed()
-      .then(setDismissed)
-      .catch(() => setDismissed(true)); // storage trouble must not gate the app
-  }, []);
-
-  const skip = useCallback(() => {
-    setDismissed(true);
-    setAuthPromptDismissed(true).catch(() => undefined);
-  }, []);
-
-  if (dismissed === null) return <Splash />;
-  if (!authConfigured || dismissed) return <RootNavigator />;
-  return <SessionGate onSkip={skip} />;
+  // Hooks must run unconditionally, so this can't be branched around.
+  if (!authConfigured) return <NotConfigured />;
+  return <SessionGate />;
 }
 
-/** Split out so `useSession` is only ever called when a server is configured. */
-function SessionGate({ onSkip }: { onSkip: () => void }) {
+function SessionGate() {
   const { data, isPending } = useSession();
 
   if (isPending) return <Splash />;
   if (data?.session) return <RootNavigator />;
-  return <SignInScreen onDone={onSkip} />;
+  return <SignInScreen />;
+}
+
+/**
+ * No server address was built into the bundle, so there is no way to sign in
+ * and therefore no way in at all. Say exactly that rather than showing a
+ * sign-in form whose every request would fail.
+ */
+function NotConfigured() {
+  const styles = useThemedStyles(makeStyles);
+  return (
+    <View style={styles.root}>
+      <AppBackground />
+      <View style={styles.configWrap}>
+        <Text style={styles.mark}>🛟</Text>
+        <GlassView>
+          <View style={{ padding: spacing(2.5) }}>
+            <Banner
+              tone="warning"
+              title="No server configured"
+              message={
+                'Set EXPO_PUBLIC_AUTH_URL in .env to the address of the Saviour server, then restart Metro with "npx expo start -c" — these values are baked into the bundle, so a plain reload will not pick up the change.'
+              }
+            />
+          </View>
+        </GlassView>
+      </View>
+    </View>
+  );
 }
 
 function Splash() {
@@ -64,5 +78,7 @@ const makeStyles = ({ colors, type }: ThemeState) =>
       backgroundColor: colors.bg,
       gap: spacing(2),
     },
+    configWrap: { alignSelf: 'stretch', padding: spacing(2.5) },
+    mark: { fontSize: 44, textAlign: 'center', marginBottom: spacing(2) },
     label: { ...type.label, color: colors.textFaint },
   });

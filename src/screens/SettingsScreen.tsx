@@ -18,7 +18,6 @@ import {
   clearAllData,
   clearIncidents,
   genId,
-  setAuthPromptDismissed,
 } from '../storage';
 import { authClient, authConfigured, useSession } from '../services/auth';
 import {
@@ -93,7 +92,10 @@ export function SettingsScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <ScreenHeader title="Settings" subtitle="Everything is stored on this device only." />
+      <ScreenHeader
+        title="Settings"
+        subtitle="Stored on this device and synced to your account."
+      />
 
       <Card>
         <Field
@@ -191,9 +193,8 @@ export function SettingsScreen() {
       />
 
       <Text style={styles.about}>
-        Saviour v{VERSION} · No account, no server. Alerts go out through your own SMS app. Fall
-        detection uses on-device sensors and pauses when the app is backgrounded — keep it open while
-        relying on it.
+        Saviour v{VERSION} · Alerts go out through your own phone, not a server. Fall detection uses
+        on-device sensors and pauses when the app is backgrounded — keep it open while relying on it.
       </Text>
 
       {testIncident && (
@@ -298,8 +299,8 @@ function AccountSection() {
         onPress: async () => {
           setBusy(true);
           try {
+            // Clearing the session drops the user back at the sign-in gate.
             await authClient.signOut();
-            await setAuthPromptDismissed(false);
           } catch {
             Alert.alert('Could not sign out', 'Check your connection and try again.');
           } finally {
